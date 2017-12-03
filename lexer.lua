@@ -21,6 +21,10 @@ end
 function Lexer:consume (n)
   if self._error ~= nil then return "" end
 
+  -- Remove a newline combination as a single character
+  if n==1 and (self:starts_with("\r\n") or self:starts_with("\n\r"))
+  then n = 2 end
+
   local str = self.text:sub(1, n)
   self.text = self.text:sub(n+1, -1)
   self.char = self:char_at(1)
@@ -58,7 +62,10 @@ function Lexer:consume_while_in (patt)
 end
 
 function Lexer:next ()
-  --if error ~= nil then return nil end
+  if self._error ~= nil then
+    self.token = nil
+    return nil
+  end
 
   if self.token ~= nil then
     local old = self.token
@@ -184,7 +191,8 @@ function Lexer:long_string ()
   self:error("unfinished long string")
 end
 
-function Lexer:string ()
+-- Its own function rather than in string because it's too long
+function Lexer:escape_sequence ()
 
   local function get_hex ()
     if self:char_in(HEXDIGITS) then
@@ -200,6 +208,44 @@ function Lexer:string ()
     end
   end
 
+  local tbl = { a="\a", b="\b", f="\f", n="\n", r="\r", t="\t", v="\v" }
+
+  if tbl[self.char] ~= nil then
+    return tbl[self:consume(1)]
+  elseif self:char_in("'\\\"\n\r") then
+    return self:consume(1)
+  elseif self.char == "x" then
+    self:consume(1)
+    local code = get_hex()*16 + get_hex()
+    return string.char(code)
+  elseif self.char == "u" then
+    if self:consume(2) ~= "u{" then
+      return self:error("missing {")
+    end
+
+    local code = 0
+    repeat
+      if self.char == "" then
+        return self:error("unfinished string")
+      end
+
+      code = code*16 + get_hex()
+      if code > 0x10FFFF then
+        return self:error("UTF-8 value too large")
+      end
+    until self.char == "}"
+    self:consume(1)
+
+    return utf8.char(code)
+  elseif self.char == "z" then
+    self:consume(1)
+    self:consume_while_in(WHITESPACE)
+    return ""
+  end
+end
+
+function Lexer:string ()
+
   if not self:char_in("'\"")
   then return nil end
 
@@ -212,46 +258,13 @@ function Lexer:string ()
       return str
     elseif self:char_in("\n\r") then
       return self:error("unfinished string")
-
     elseif self.char == "\\" then
       self:consume(1)
 
-      local esc = ({
-        a="\a", b="\b", f="\f", n="\n", r="\r", t="\t", v="\v"
-      })[self.char]
-      if self:char_in("'\"\\") then esc = self.char end
-
-      if self.char == "x" then
-        self:consume(1)
-        local code = get_hex()*16 + get_hex()
-        str = str .. string.char(code)
-
-      elseif self.char == "u" then
-        if self:consume(2) ~= "u{" then
-          return self:error("missing {")
-        end
-
-        local code = 0
-        repeat
-          if self.char == "" then
-            return self:error("unfinished string")
-          end
-
-          code = code*16 + get_hex()
-          if code > 0x10FFFF then
-            return self:error("UTF-8 value too large")
-          end
-        until self.char == "}"
-        self:consume(1)
-
-        str = str .. utf8.char(code)
-      elseif self.char == "z" then
-        self:consume(1)
-        self:consume_while_in(WHITESPACE)
-      elseif esc == nil then
-        self:error("invalid escape sequence")
+      local esc = self:escape_sequence()
+      if esc == nil then
+        return self:error("invalid escape sequence")
       else
-        self:consume(1)
         str = str .. esc
       end
     else
@@ -364,7 +377,9 @@ local function TEST ()
     end
 
     if fail then
-      print("FAIL:", str)
+      if lex._error then
+        print("FAIL with", lex._error, str)
+      else print("FAIL:", str) end
       print("\tEXPECTED\t\tTOKEN")
       print(msg)
     else
@@ -446,7 +461,6 @@ local function TEST ()
 
   test("\"ho'la\" 'ho\"la'", STR("ho'la"), STR('ho"la'))
   test_error("'ho\nla'")
-  test("'ho\\\nla'", STR("ho\nla"))
   test_error('"ho\\kla"')
   test('"a\\x62c"', STR("abc"))
   test_error('"l\\x6m"')
@@ -458,6 +472,10 @@ local function TEST ()
   test_error('"a\\u{}cde"')
 
   test('"a \\z  \n\t  b"', STR("a b"))
+
+  test("'ho\\\nla'", STR("ho\nla"))
+  test("'ho\\\n\rla'", STR("ho\n\rla"))
+  test_error("'ho\\\n\nla'")
 
 
   test([[
