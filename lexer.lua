@@ -1,5 +1,23 @@
 
-local token, source, char, token, _err
+local token, source, char, _err
+
+
+local Lexer = { }
+setmetatable(Lexer, {
+  __index = function (self, name)
+    if name == "token"
+      then return token
+    elseif name == "err"
+      then return _err
+    end
+  end
+})
+
+function Lexer.open (src)
+  _err = nil
+  source = src
+  char = src:sub(1,1)
+end
 
 -- Lexer error function
 local function err (msg)
@@ -271,7 +289,9 @@ local function number ()
 end
 
 -- Get the next token
-local function lex ()
+function Lexer.next ()
+  if _err then return nil end
+
   skip_whitespace()
 
   local str = long_string()
@@ -309,39 +329,6 @@ local function lex ()
   end
 end
 
-local function next ()
-  if _err ~= nil then
-    token = nil
-    return nil
-  end
-
-  if token ~= nil then
-    local old = token
-    token = lex()
-    return old
-  end
-end
-
-local function open (src)
-  _err = nil
-  source = src
-  char = char_at(1)
-  token = lex()
-end
-
-local Lexer = { open = open, next = next }
-local Lexer_MT = {
-  __index = function (self, name)
-    if name == "token"
-      then return token
-    elseif name == "err"
-      then return _err
-    end
-  end
-}
-
-setmetatable(Lexer, Lexer_MT)
-
 
 -------------------
 --    Testing    --
@@ -374,8 +361,9 @@ do
     local toks = table.pack(...)
     
     local i = 1
+    local tk  = Lexer.next()
+
     while token ~= nil or i <= #toks do
-      local tk = next()
       local _tk = toks[i]
 
       if  tk == nil
@@ -385,7 +373,9 @@ do
       then fail = true end
 
       msg = msg .. "\t" .. tk_str(_tk) .. "\t\t" .. tk_str(tk) .. "\n"
+
       i = i+1
+      tk = Lexer.next()
     end
 
     if fail then
@@ -401,9 +391,9 @@ do
 
   local function test_error (str)
     Lexer.open(str)
-    while token ~= nil do
-      next()
-    end
+    repeat
+      local tk = Lexer.next()
+    until tk == nil
 
     if not Lexer.err then
       print("FAIL: expected error for code:", str)
