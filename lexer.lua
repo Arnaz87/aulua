@@ -1,80 +1,59 @@
 
-local Lexer = {}
-local Lexer_mt = { __index = Lexer }
+local token, source, char, token, _err
 
-Lexer.new = function (text)
-  self = { text = text, token = nil }
-  setmetatable(self, Lexer_mt)
-  self.char = self:char_at(1)
-  self.token = self:lex()
-  return self
-end
-
-function Lexer:error(msg)
-  if self._error == nil then
-    self._error = msg
-    self.char = ""
+-- Lexer error function
+local function err (msg)
+  if _err == nil then
+    _err = msg
+    char = ""
   end
-end
-
--- Consumes n characters and returns them
-function Lexer:consume (n)
-  if self._error ~= nil then return "" end
-
-  -- Remove a newline combination as a single character
-  if n==1 and (self:starts_with("\r\n") or self:starts_with("\n\r"))
-  then n = 2 end
-
-  local str = self.text:sub(1, n)
-  self.text = self.text:sub(n+1, -1)
-  self.char = self:char_at(1)
-  return str
 end
 
 -- Finds the character at the nth position (base 1)
-function Lexer:char_at (i)
-  if self._error ~= nil then return "" end
-  return self.text:sub(i, i)
-end
-
--- Cheks if a string contains the current character
-function Lexer:char_in (str)
-  if self.char == "" then return false end
-  return str:find(self.char, 1, true) ~= nil
+local function char_at (i)
+  if _err ~= nil then return "" end
+  return source:sub(i, i)
 end
 
 -- Checks if the text starts with a string
-function Lexer:starts_with (str)
-  if self.char == "" then return false end
-  return self.text:find(str, 1, true) == 1
+local function starts_with (str)
+  if char == "" then return false end
+  return source:find(str, 1, true) == 1
+end
+
+-- Consumes n characters and returns them
+local function consume (n)
+  if _err ~= nil then return "" end
+
+  -- Remove a newline combination as a single character
+  if n==1 and (starts_with("\r\n") or starts_with("\n\r"))
+  then n = 2 end
+
+  local str = source:sub(1, n)
+  source = source:sub(n+1, -1)
+  char = char_at(1)
+  return str
+end
+
+-- Cheks if a string contains the current character
+local function char_in (str)
+  if char == "" then return false end
+  return str:find(char, 1, true) ~= nil
 end
 
 -- Consume all characters in a set of characters
-function Lexer:consume_while_in (patt)
-  if self.char == "" then return "" end
+local function consume_while_in (patt)
+  if char == "" then return "" end
 
   local str = ""
-  while self:char_in(patt)
-  do str = str .. self:consume(1)
+  while char_in(patt)
+  do str = str .. consume(1)
   end
 
   return str
 end
 
-function Lexer:next ()
-  if self._error ~= nil then
-    self.token = nil
-    return nil
-  end
-
-  if self.token ~= nil then
-    local old = self.token
-    self.token = self:lex()
-    return old
-  end
-end
-
-KEYWORDS = {
+local KEYWORDS = {
   "and", "break", "do", "else", "elseif", "end",
   "false", "for", "function", "goto", "if", "in",
   "local", "nil", "not", "or", "repeat", "return",
@@ -82,7 +61,7 @@ KEYWORDS = {
 }
 
 -- // antes va antes que /, y lo mismo con ... .. . << <= < >> >= > == = :: :
-OPS = {
+local OPS = {
   "&", "~", "|", "<<", ">>", "//",
   "+", "-", "*", "/", "%", "^", "#",
   "==", "~=", "<=", ">=", "<", ">", "=",
@@ -90,52 +69,227 @@ OPS = {
   ";", ":", ",", "...", "..", ".",
 }
 
-LOWER = "abcdefghijklmnopqrstuvwxyz"
-UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-DIGITS = "01234567890"
-HEXDIGITS = "0123456789abcdefABCDEF"
-ALPHA = LOWER .. UPPER .. "_"
-ALPHANUM = ALPHA .. DIGITS
-WHITESPACE = " \b\n\r\t\v"
+local LOWER = "abcdefghijklmnopqrstuvwxyz"
+local UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+local DIGITS = "01234567890"
+local HEXDIGITS = "0123456789abcdefABCDEF"
+local ALPHA = LOWER .. UPPER .. "_"
+local ALPHANUM = ALPHA .. DIGITS
+local WHITESPACE = " \b\n\r\t\v"
 
-function Lexer:skip_whitespace ()
+local function long_string ()
+  if not starts_with("[")
+    then return nil end
+  i = 2
+  while char_at(i) == "="
+    do i = i+1 end
+  count = i-2
+  if char_at(i) ~= "[" then
+    if count == 0 then return nil
+    else return err("invalid long string delimiter") end
+  end
+  consume(count + 2)
+  str = ""
+  while char ~= "" do
+    if char == "]" then
+      tag = consume(1)
+
+      n_count = 0
+      while char == "=" do
+        tag = tag .. consume(1)
+        n_count = n_count+1
+      end
+
+      if char == "]" and count == n_count then
+        consume(1)
+        return str
+      else
+        str = str .. tag
+      end
+    else
+      str = str .. consume(1)
+    end
+  end
+  err("unfinished long string")
+end
+
+local function skip_whitespace ()
   local str
-  while self.char ~= "" do
-    self:consume_while_in(WHITESPACE)
+  while char ~= "" do
+    consume_while_in(WHITESPACE)
 
-    if self:starts_with("--") then
-      self:consume(2)
-      str = self:long_string()
+    if starts_with("--") then
+      consume(2)
+      str = long_string()
       if str == nil then
-        -- long comment fails, consume all until newline
-        while not self:char_in("\n\r") do
-          self:consume(1)
+        -- long comment fails, consume all until a newline
+        while char ~= "" and not char_in("\n\r") do
+          consume(1)
         end
       end
     else return end
   end
 end
 
+-- Its own function rather than in string because it's too long
+local function escape_sequence ()
+
+  local function get_hex ()
+    if char_in(HEXDIGITS) then
+      local char = consume(1):lower()
+      if char >= "a" then
+        return char:byte() - string.byte("a") + 10
+      else
+        return char:byte() - string.byte("0")
+      end
+    else
+      err("hexadecimal digit expected")
+      return 0
+    end
+  end
+
+  local tbl = { a="\a", b="\b", f="\f", n="\n", r="\r", t="\t", v="\v" }
+
+  if tbl[char] ~= nil then
+    return tbl[consume(1)]
+  elseif char_in("'\\\"\n\r") then
+    return consume(1)
+  elseif char == "x" then
+    consume(1)
+    local code = get_hex()*16 + get_hex()
+    return string.char(code)
+  elseif char == "u" then
+    if consume(2) ~= "u{" then
+      return err("missing {")
+    end
+
+    local code = 0
+    repeat
+      if char == "" then
+        return err("unfinished string")
+      end
+
+      code = code*16 + get_hex()
+      if code > 0x10FFFF then
+        return err("UTF-8 value too large")
+      end
+    until char == "}"
+    consume(1)
+
+    return utf8.char(code)
+  elseif char == "z" then
+    consume(1)
+    consume_while_in(WHITESPACE)
+    return ""
+  end
+end
+
+local function string ()
+
+  if not char_in("'\"")
+  then return nil end
+
+  local delimiter = consume(1)
+
+  local str = ""
+  while char ~= "" do
+    if char == delimiter then
+      consume(1)
+      return str
+    elseif char_in("\n\r") then
+      return err("unfinished string")
+    elseif char == "\\" then
+      consume(1)
+
+      local esc = escape_sequence()
+      if esc == nil then
+        return err("invalid escape sequence")
+      else
+        str = str .. esc
+      end
+    else
+      -- Any non special character
+      str = str .. consume(1)
+    end
+  end
+  err("unfinished string")
+end
+
+local function name ()
+  if not char_in(ALPHA)
+  then return nil end
+  
+  local str =  consume(1)
+  str = str .. consume_while_in(ALPHANUM)
+  return str
+end
+
+local function number ()
+
+  -- Is the first character a point and the next a digit
+  local is_point =
+    char == "." and
+    char_at(2) ~= "" and
+    DIGITS:find(char_at(2), 1, true) ~= nil
+
+  -- Quit if it's not a digit nor a point
+  if not (char_in(DIGITS) or is_point)
+  then return nil end
+
+  local digits, exp, str
+
+  if starts_with("0x") or starts_with("0X") then
+    str = consume(2)
+    digits = HEXDIGITS
+    exp = "pP"
+  else
+    str = ""
+    digits = DIGITS
+    exp = "eE"
+  end
+
+  str = str .. consume_while_in(digits)
+  if char == "." then
+    str = str .. consume(1) .. consume_while_in(digits)
+  end
+
+  -- There must be significant digits
+  if str == "0x" or str == "0X" or str == ""
+  then err("malformed significant digits") end
+
+  if char_in(exp) then
+    str = str .. consume(1)
+    if char_in("+-") then
+      str = str .. consume(1) end
+    -- Exponent is always decimal
+    local exp = consume_while_in(DIGITS)
+    if exp == "" then err("malformed exponent")
+    else str = str .. exp end
+  end
+
+  return str
+end
+
 -- Get the next token
-function Lexer.lex ()
-  self:skip_whitespace()
+local function lex ()
+  skip_whitespace()
 
-  local str = self:long_string()
+  local str = long_string()
   if str ~= nil then
     return { type = "STR", value = str}
   end
 
-  str = self:string()
+  str = string()
   if str ~= nil then
     return { type = "STR", value = str}
   end
 
-  num = self:number()
+  num = number()
   if num ~= nil then
     return { type = "NUM", value = num}
   end
 
-  local name = self:name()
+  local name = name()
   if name ~= nil then
     -- Check if the name is a keyword
     for i, kw in pairs(KEYWORDS) do
@@ -148,196 +302,54 @@ function Lexer.lex ()
 
   -- After everything failed, look for operators
   for i, op in pairs(OPS) do
-    if self:starts_with(op) then
-      self:consume(#op)
+    if starts_with(op) then
+      consume(#op)
       return { type = op }
     end
   end
 end
 
-function Lexer:long_string ()
-  if not self:starts_with("[")
-    then return nil end
-  i = 2
-  while self:char_at(i) == "="
-    do i = i+1 end
-  count = i-2
-  if self:char_at(i) ~= "[" then
-    if count == 0 then return nil
-    else return self:error("invalid long string delimiter") end
+local function next ()
+  if _err ~= nil then
+    token = nil
+    return nil
   end
-  self:consume(count + 2)
-  str = ""
-  while self.char ~= "" do
-    if self.char == "]" then
-      tag = self:consume(1)
 
-      n_count = 0
-      while self.char == "=" do
-        tag = tag .. self:consume(1)
-        n_count = n_count+1
-      end
+  if token ~= nil then
+    local old = token
+    token = lex()
+    return old
+  end
+end
 
-      if self.char == "]" and count == n_count then
-        self:consume(1)
-        return str
-      else
-        str = str .. tag
-      end
-    else
-      str = str .. self:consume(1)
+local function open (src)
+  _err = nil
+  source = src
+  char = char_at(1)
+  token = lex()
+end
+
+local Lexer = { open = open, next = next }
+local Lexer_MT = {
+  __index = function (self, name)
+    if name == "token"
+      then return token
+    elseif name == "err"
+      then return _err
     end
   end
-  self:error("unfinished long string")
-end
+}
 
--- Its own function rather than in string because it's too long
-function Lexer:escape_sequence ()
-
-  local function get_hex ()
-    if self:char_in(HEXDIGITS) then
-      local char = self:consume(1):lower()
-      if char >= "a" then
-        return char:byte() - string.byte("a") + 10
-      else
-        return char:byte() - string.byte("0")
-      end
-    else
-      self:error("hexadecimal digit expected")
-      return 0
-    end
-  end
-
-  local tbl = { a="\a", b="\b", f="\f", n="\n", r="\r", t="\t", v="\v" }
-
-  if tbl[self.char] ~= nil then
-    return tbl[self:consume(1)]
-  elseif self:char_in("'\\\"\n\r") then
-    return self:consume(1)
-  elseif self.char == "x" then
-    self:consume(1)
-    local code = get_hex()*16 + get_hex()
-    return string.char(code)
-  elseif self.char == "u" then
-    if self:consume(2) ~= "u{" then
-      return self:error("missing {")
-    end
-
-    local code = 0
-    repeat
-      if self.char == "" then
-        return self:error("unfinished string")
-      end
-
-      code = code*16 + get_hex()
-      if code > 0x10FFFF then
-        return self:error("UTF-8 value too large")
-      end
-    until self.char == "}"
-    self:consume(1)
-
-    return utf8.char(code)
-  elseif self.char == "z" then
-    self:consume(1)
-    self:consume_while_in(WHITESPACE)
-    return ""
-  end
-end
-
-function Lexer:string ()
-
-  if not self:char_in("'\"")
-  then return nil end
-
-  local delimiter = self:consume(1)
-
-  local str = ""
-  while self.char ~= "" do
-    if self.char == delimiter then
-      self:consume(1)
-      return str
-    elseif self:char_in("\n\r") then
-      return self:error("unfinished string")
-    elseif self.char == "\\" then
-      self:consume(1)
-
-      local esc = self:escape_sequence()
-      if esc == nil then
-        return self:error("invalid escape sequence")
-      else
-        str = str .. esc
-      end
-    else
-      -- Any non special character
-      str = str .. self:consume(1)
-    end
-  end
-  self:error("unfinished string")
-end
-
-function Lexer:name ()
-  if not self:char_in(ALPHA)
-  then return nil end
-  
-  local str =  self:consume(1)
-  str = str .. self:consume_while_in(ALPHANUM)
-  return str
-end
-
-function Lexer:number ()
-
-  -- Is the first character a point and the next a digit
-  local is_point =
-    self.char == "." and
-    self:char_at(2) ~= "" and
-    DIGITS:find(self:char_at(2), 1, true) ~= nil
-
-  -- Quit if it's not a digit nor a point
-  if not (self:char_in(DIGITS) or is_point)
-  then return nil end
-
-  local digits, exp, str
-
-  if self:starts_with("0x") or self:starts_with("0X") then
-    str = self:consume(2)
-    digits = HEXDIGITS
-    exp = "pP"
-  else
-    str = ""
-    digits = DIGITS
-    exp = "eE"
-  end
-
-  str = str .. self:consume_while_in(digits)
-  if self.char == "." then
-    str = str .. self:consume(1) .. self:consume_while_in(digits)
-  end
-
-  -- There must be significant digits
-  if str == "0x" or str == "0X" or str == ""
-  then self:error("malformed significant digits") end
-
-  if self:char_in(exp) then
-    str = str .. self:consume(1)
-    if self:char_in("+-") then
-      str = str .. self:consume(1) end
-    -- Exponent is always decimal
-    local exp = self:consume_while_in(DIGITS)
-    if exp == "" then self:error("malformed exponent")
-    else str = str .. exp end
-  end
-
-  return str
-end
-
-
+setmetatable(Lexer, Lexer_MT)
 
 
 -------------------
 --    Testing    --
 -------------------
 
-local function TEST ()
+do
+  local loud = false
+
   local function STR (str) return { type = "STR", value = str } end
   local function NUM (val) return { type = "NUM", value = val } end
   local function NAME (str) return { type = "NAME", value = str } end
@@ -356,14 +368,14 @@ local function TEST ()
   end
 
   local function test (str, ...)
-    local lex = Lexer.new(str)
+    Lexer.open(str)
     local fail = false
     local msg = ""
     local toks = table.pack(...)
     
     local i = 1
-    while lex.token ~= nil or i <= #toks do
-      local tk = lex:next()
+    while token ~= nil or i <= #toks do
+      local tk = next()
       local _tk = toks[i]
 
       if  tk == nil
@@ -377,27 +389,27 @@ local function TEST ()
     end
 
     if fail then
-      if lex._error then
-        print("FAIL with", lex._error, str)
+      if Lexer.err then
+        print("FAIL with", Lexer.err, str)
       else print("FAIL:", str) end
       print("\tEXPECTED\t\tTOKEN")
       print(msg)
-    else
+    elseif loud then
       print("CORRECT ", str)
     end
   end
 
   local function test_error (str)
-    local lex = Lexer.new(str)
-    while lex.token ~= nil do
-      lex:next()
+    Lexer.open(str)
+    while token ~= nil do
+      next()
     end
 
-    if lex._error then
-      print("CORRECT error: ", lex._error)
-      print("\tfor code:", str)
-    else
+    if not Lexer.err then
       print("FAIL: expected error for code:", str)
+    elseif loud then
+      print("CORRECT error: ", Lexer.err)
+      print("\tfor code:", str)
     end
   end
 
@@ -421,6 +433,9 @@ local function TEST ()
   test("_F", NAME("_F"))
   test("else", KW("else"))
   test("elseif", KW("elseif"))
+
+  test("+ --Hola\n", KW("+"))
+  test("+ --Hola", KW("+"))
   test("-- comentario\nfoo", NAME("foo"))
   test("--[=[comentario\n]]largo]=]+", KW("+"))
 
@@ -492,7 +507,5 @@ local function TEST ()
     KW("end")
   )
 end
-
-TEST()
 
 return Lexer
