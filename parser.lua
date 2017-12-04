@@ -52,17 +52,13 @@ local function expect (...)
 
   local types = table.pack(...)
 
-  if #types == 1 then
-    return err(types[1]:lower() .. " expected")
-  end
-
-  local str = "("
+  local str = ""
   for i = 1, #types do
-    if i > 1 then str = str .. " | " end
+    if i > 1 then str = str .. " or " end
     str = str .. types[i]:lower()
   end
 
-  err(str .. ") expected")
+  err(str .. " expected")
 end
 
 local function match (what, who, where)
@@ -84,11 +80,12 @@ function Parser.simpleexp ()
   elseif check("STR") then
     return { type="str", value = next().value }
   end
-  grave("Expressions are not fully supported")
 end
 
 function Parser.expr ()
-  return Parser.simpleexp()
+  local exp = Parser.simpleexp()
+  if exp then return exp
+  else err("Invalid Expression") end
 end
 
 function Parser.prymaryexp ()
@@ -118,15 +115,29 @@ function Parser.explist ()
 end
 
 function Parser.forstat ()
-  if true then
-    return grave("For not yet supported")
-  end
   expect("for")
 
   local tk = expect("NAME")
   if not tk then return end
 
-  if check(",") then
+  if try("=") then
+    local name = tk.value
+    local init = Parser.expr()
+    expect(",")
+    local limit = Parser.expr()
+    local step
+    if try(",") then
+      step = Parser.expr()
+    end
+
+    expect("do")
+    local body = Parser.statlist()
+    match("end", "for")
+    return {
+      type="numfor", name=name, body=body,
+      init=init, limit=limit, step=step
+    }
+  elseif check(",", "in") then
     local names = {tk.value}
     while try(",") do
       tk = expect("NAME")
@@ -137,9 +148,9 @@ function Parser.forstat ()
     local explist = Parser.explist()
     expect("do")
     local body = Parser.statlist()
-    expect("end")
+    match("end", "for")
     return  {type="genfor", vars=names, explist=explist, body=body}
-  end
+  else expect("=", ",", "in") end
 end
 
 function Parser.ifstat ()

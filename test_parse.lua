@@ -56,23 +56,6 @@ local function eq (t1, t2)
   return true
 end
 
---[[
-local function test (meth, str, expected)
-  Parser.open(str)
-  local node = Parser[meth]()
-  if eq(node, expected) then
-    print("CORRECT", str)
-  else
-    print("FAIL", str)
-    if Parser.error then print("\t" .. Parser.error)
-    else print("\tGOT", tostr(node)) end
-  end
-end
-
-test("expr", "45", {type="num", value="45"})
-test("expr", "nil", {type="nil"})
-]]
-
 -- Based on
 -- https://github.com/stravant/LuaMinify/blob/master/tests/test_parser.lua
 
@@ -119,7 +102,7 @@ do end do                               -- FAIL
 do end end                              -- FAIL
 do return end
 do return return end                    -- FAIL
-do break end                  -- Semantic Error
+do break end
 ;; do end ;;
 while                                   -- FAIL
 while do                                -- FAIL
@@ -161,11 +144,11 @@ repeat "foo" until 1                    -- FAIL
 repeat return until 0
 repeat return return until 0            -- FAIL
 repeat break until 0
-repeat break break until 0    -- Semantic Error
+repeat break break until 0
 repeat do end until 0
 repeat do return end until 0
 repeat do break end until 0
-break                         -- Semantic Error
+break
 return
 return;
 return return                           -- FAIL
@@ -179,7 +162,7 @@ return 1,2;
 return ...
 return 1,a,...
 return ...,1,2
-if                                      -- FAIL LOUD
+if                                      -- FAIL
 elseif                                  -- FAIL
 else                                    -- FAIL
 then                                    -- FAIL
@@ -204,10 +187,65 @@ if 1 then local a; elseif 2 then local b; end
 if 1 then elseif 2 then else end
 if 1 then else if 2 then end end
 if 1 then else if 2 then end            -- FAIL
-if 1 then break end           -- Semantic Error
+if 1 then break end
 if 1 then return end
 if 1 then return return end             -- FAIL
 if 1 then end; if 1 then end;
+for                                     -- FAIL LOUD
+for do                                  -- FAIL
+for end                                 -- FAIL
+for 1                                   -- FAIL
+for a                                   -- FAIL
+for true                                -- FAIL
+for =                                   -- FAIL
+for a =                                 -- FAIL
+for a, b =                              -- FAIL
+for a = do                              -- FAIL
+for a = 1, do                           -- FAIL
+for a = p, q, do                        -- FAIL
+for a = p q do                          -- FAIL
+for a = b do end                        -- FAIL
+for a = 1, 2, 3, 4 do end               -- FAIL
+for a = p, q do end
+for a = 1, 2 do end
+for a = 1, 2 do local a local b end
+for a = 1, 2 do local a; local b; end
+for a = 1, 2 do 3 end                   -- FAIL
+for a = 1, 2 do "foo" end               -- FAIL
+for a = p, q, r do end
+for a = 1, 2, 3 do end
+for a = p, q do break end
+for a = p, q do break break end
+for a = 1, 2 do return end
+for a = 1, 2 do return return end       -- FAIL
+for a = p, q do do end end
+for a = p, q do do break end end
+for a = p, q do do return end end
+for a, in                               -- FAIL
+for a in                                -- FAIL
+for a do                                -- FAIL
+for a in do                             -- FAIL
+for a in b do                           -- FAIL
+for a in b end                          -- FAIL
+for a in b, do                          -- FAIL
+for a in b do end
+for a in b do local a local b end
+for a in b do local a; local b; end
+for a in b do 1 end                     -- FAIL
+for a in b do "foo" end                 -- FAIL
+for a b in                              -- FAIL
+for a, b, c in p do end
+for a, b, c in p, q, r do end
+for a in 1 do end
+for a in true do end
+for a in "foo" do end
+for a in b do break end
+for a in b do break break end
+for a in b do return end
+for a in b do return return end         -- FAIL
+for a in b do do end end
+for a in b do do break end end
+for a in b do do return end end
 ]=]
 
 local function FAIL (line, msg)
@@ -247,5 +285,22 @@ while ix < #source do
 
   ix=nix+1
 end
+
+--[[
+local function test (meth, str, expected)
+  Parser.open(str)
+  local node = Parser[meth]()
+  if eq(node, expected) then
+    print("CORRECT", str)
+  else
+    print("FAIL", str)
+    if Parser.error then print("\t" .. Parser.error)
+    else print("\tGOT", tostr(node)) end
+  end
+end
+
+test("expr", "45", {type="num", value="45"})
+test("expr", "nil", {type="nil"})
+]]
 
 return Parser, test
