@@ -120,6 +120,7 @@ do end end                              -- FAIL
 do return end
 do return return end                    -- FAIL
 do break end                  -- Semantic Error
+;; do end ;;
 while                                   -- FAIL
 while do                                -- FAIL
 while =                                 -- FAIL
@@ -164,37 +165,49 @@ repeat break break until 0    -- Semantic Error
 repeat do end until 0
 repeat do return end until 0
 repeat do break end until 0
-for                                     -- fail   --LOUD
-for do                                  -- FAIL
-for end                                 -- FAIL
-for 1                                   -- FAIL
-for a                                   -- FAIL
-for true                                -- FAIL
-for a, in                               -- FAIL
-for a in                                -- FAIL
-for a do                                -- FAIL
-for a in do                             -- FAIL
-for a in b do                           -- FAIL
-for a in b end                          -- FAIL
-for a in b, do                          -- FAIL
-for a in b do end
-for a in b do local a local b end
-for a in b do local a; local b; end
-for a in b do 1 end                     -- FAIL
-for a in b do "foo" end                 -- FAIL
-for a b in                              -- FAIL
-for a, b, c in p do end
-for a, b, c in p, q, r do end
-for a in 1 do end
-for a in true do end
-for a in "foo" do end
-for a in b do break end
-for a in b do break break end           -- FAIL
-for a in b do return end
-for a in b do return return end         -- FAIL
-for a in b do do end end
-for a in b do do break end end
-for a in b do do return end end
+break                         -- Semantic Error
+return
+return;
+return return                           -- FAIL
+return 1
+return local                            -- FAIL
+return "foo"
+return 1,                               -- FAIL
+return 1,2,3
+return a,b,c,d
+return 1,2;
+return ...
+return 1,a,...
+return ...,1,2
+if                                      -- FAIL LOUD
+elseif                                  -- FAIL
+else                                    -- FAIL
+then                                    -- FAIL
+if then                                 -- FAIL
+if 1                                    -- FAIL
+if 1 then                               -- FAIL
+if 1 else                               -- FAIL
+if 1 then else                          -- FAIL
+if 1 then elseif                        -- FAIL
+if 1 then end
+if 1 then local a end
+if 1 then local a local b end
+if 1 then local a; local b; end
+if 1 then else end
+if 1 then local a else local b end
+if 1 then local a; else local b; end
+if 1 then elseif 2                      -- FAIL
+if 1 then elseif 2 then                 -- FAIL
+if 1 then elseif 2 then end
+if 1 then local a elseif 2 then local b end
+if 1 then local a; elseif 2 then local b; end
+if 1 then elseif 2 then else end
+if 1 then else if 2 then end end
+if 1 then else if 2 then end            -- FAIL
+if 1 then break end           -- Semantic Error
+if 1 then return end
+if 1 then return return end             -- FAIL
+if 1 then end; if 1 then end;
 ]=]
 
 local function FAIL (line, msg)

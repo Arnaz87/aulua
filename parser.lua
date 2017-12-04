@@ -65,11 +65,24 @@ local function expect (...)
   err(str .. ") expected")
 end
 
+local function match (what, who, where)
+  local tk = try(what)
+  if tk then return tk end
+  where = where or "?"
+  err(what .. " expected (to close " .. who .. " at " .. where .. ")")
+end
+
 function Parser.simpleexp ()
   if check("NUM") then
     return { type = "num", value = next().value }
   elseif check("true", "false", "nil") then
     return { type = next().type }
+  elseif try("...") then
+    return { type = "varargs" }
+  elseif check("NAME") then
+    return { type="var", value = next().value }
+  elseif check("STR") then
+    return { type="str", value = next().value }
   end
   grave("Expressions are not fully supported")
 end
@@ -101,27 +114,90 @@ function Parser.explist ()
     local expr = Parser.expr()
     table.insert(list, expr)
   until not try(",")
-  return expr
+  return list
+end
+
+function Parser.forstat ()
+  if true then
+    return grave("For not yet supported")
+  end
+  expect("for")
+
+  local tk = expect("NAME")
+  if not tk then return end
+
+  if check(",") then
+    local names = {tk.value}
+    while try(",") do
+      tk = expect("NAME")
+      if not tk then return end
+      table.insert(names, tk.value)
+    end
+    expect("in")
+    local explist = Parser.explist()
+    expect("do")
+    local body = Parser.statlist()
+    expect("end")
+    return  {type="genfor", vars=names, explist=explist, body=body}
+  end
+end
+
+function Parser.ifstat ()
+  expect("if")
+  local clauses = {}
+
+  local cond = Parser.expr()
+  expect("then")
+  local body = Parser.statlist()
+  table.insert(clauses, {
+    type="clause", cond=cond, body=body
+  })
+
+  while try("elseif") do
+    cond = Parser.expr()
+    expect("then")
+    body = Parser.statlist()
+    table.insert(clauses, {
+      type="clause", cond=cond, body=body
+    })
+  end
+
+  if try("else") then
+    body = Parser.statlist()
+    table.insert(clauses, {
+      type="clause", body=body
+    })
+  end
+
+  match("end", "if")
+
+  return { type="if", clauses=clauses }
 end
 
 function Parser.statement ()
   if try(";") then return nil
 
+  elseif check("if") then
+    return Parser.ifstat()
+
   elseif try("while") then
     local cond = Parser.expr()
     expect("do")
     local body = Parser.statlist()
-    expect("end")
+    match("end", "while")
     return { type = "while", cond = cond, body = body }
 
   elseif try("do") then
     local body = Parser.statlist()
-    expect("end")
+    match("end", "do")
     return { type = "do", body = body }
+
+  elseif check("for") then
+    return Parser.forstat()
 
   elseif try("repeat") then
     local body = Parser.statlist()
-    expect("until")
+    match("until", "repeat")
     local cond = Parser.expr()
     return { type = "repeat", cond = cond, body = body }
 
@@ -144,8 +220,16 @@ function Parser.statement ()
       return {type="local", names=names, explist=explist}
     end
 
-  elseif check("return", "break") then
-    return { type = next().type }
+  elseif try("return") then
+    local list
+    if token and not check(";", "end", "else", "elseif", "until") then
+      list = Parser.explist()
+    end
+    try(";") -- Optional ;
+    return { type = "return", arguments = list }
+
+  elseif try("break") then
+    return { type = "break" }
 
   else err("ivalid statement") end
 end
