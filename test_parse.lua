@@ -191,7 +191,7 @@ if 1 then break end
 if 1 then return end
 if 1 then return return end             -- FAIL
 if 1 then end; if 1 then end;
-for                                     -- FAIL LOUD
+for                                     -- FAIL
 for do                                  -- FAIL
 for end                                 -- FAIL
 for 1                                   -- FAIL

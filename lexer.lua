@@ -1,35 +1,28 @@
 
-local token, source, char, _err
+local source, char, curr_pos, saved_pos
 
 
 local Lexer = { }
-setmetatable(Lexer, {
-  __index = function (self, name)
-    if name == "token"
-      then return token
-    elseif name == "err"
-      then return _err
-    end
-  end
-})
 
 function Lexer.open (src)
-  _err = nil
+  Lexer.error = nil
   source = src
   char = src:sub(1,1)
+  pos = {line=1, col=1}
+  saved_pos = nil
 end
 
 -- Lexer error function
 local function err (msg)
-  if _err == nil then
-    _err = msg
+  if not Lexer.error then
+    Lexer.error = msg .. " at line " .. pos.line .. ", column " .. pos.col
     char = ""
   end
 end
 
 -- Finds the character at the nth position (base 1)
 local function char_at (i)
-  if _err ~= nil then return "" end
+  if Lexer.error ~= nil then return "" end
   return source:sub(i, i)
 end
 
@@ -41,13 +34,32 @@ end
 
 -- Consumes n characters and returns them
 local function consume (n)
-  if _err ~= nil then return "" end
+  if Lexer.error ~= nil then return "" end
 
   -- Remove a newline combination as a single character
   if n==1 and (starts_with("\r\n") or starts_with("\n\r"))
   then n = 2 end
 
   local str = source:sub(1, n)
+
+  -- Find last newline
+  -- TODO: account for \r
+  local ix
+  local nix = str:find("\n")
+  while nix do
+    pos.line = pos.line+1
+    ix = nix+1
+    nix = str:find("\n", ix)
+  end
+
+
+  local ln = str
+  if ix then
+    ln = str:sub(ix)
+    pos.col = 1
+  end
+  pos.col = pos.col + #ln
+
   source = source:sub(n+1, -1)
   char = char_at(1)
   return str
@@ -69,6 +81,15 @@ local function consume_while_in (patt)
   end
 
   return str
+end
+
+local function TK (type, value)
+  return {
+    type = type,
+    value = value,
+    line = saved_pos.line,
+    column = saved_pos.col
+  }
 end
 
 local KEYWORDS = {
@@ -290,23 +311,26 @@ end
 
 -- Get the next token
 function Lexer.next ()
-  if _err then return nil end
+  if Lexer.error then return nil end
 
   skip_whitespace()
 
+  -- Any token read will have this position
+  saved_pos = { line = pos.line, col = pos.col }
+
   local str = long_string()
   if str ~= nil then
-    return { type = "STR", value = str}
+    return TK("STR", str)
   end
 
   str = string()
   if str ~= nil then
-    return { type = "STR", value = str}
+    return TK("STR", str)
   end
 
   num = number()
   if num ~= nil then
-    return { type = "NUM", value = num}
+    return TK("NUM", num)
   end
 
   local name = name()
@@ -314,188 +338,36 @@ function Lexer.next ()
     -- Check if the name is a keyword
     for i, kw in pairs(KEYWORDS) do
       if name == kw then
-        return { type = kw }
+        return TK(kw)
       end
     end
-    return { type = "NAME", value = name }
+    return TK("NAME", name)
   end
 
   -- After everything failed, look for operators
   for i, op in pairs(OPS) do
     if starts_with(op) then
       consume(#op)
-      return { type = op }
+      return TK(op)
     end
   end
 end
 
-
--------------------
---    Testing    --
--------------------
-
-do
-  local loud = false
-
-  local function STR (str) return { type = "STR", value = str } end
-  local function NUM (val) return { type = "NUM", value = val } end
-  local function NAME (str) return { type = "NAME", value = str } end
-  local function KW (str) return { type = str } end
-
-  local function tk_str (tk)
-    if tk == nil
-    then return "NIL"
-    end
-
-    if tk.type == "STR"
-    or tk.type == "NAME"
-    or tk.type == "NUM"
-    then return tk.type .. "(" .. tk.value .. ")"
-    else return tk.type end
+-- Get all tokens
+function Lexer.tokens ()
+  local tokens = {}
+  local tk = Lexer.next()
+  while tk ~= nil do
+    table.insert(tokens, tk)
+    tk = Lexer.next()
   end
+  if not Lexer.error then
+    return tokens end
+end
 
-  local function test (str, ...)
-    Lexer.open(str)
-    local fail = false
-    local msg = ""
-    local toks = table.pack(...)
-    
-    local i = 1
-    local tk  = Lexer.next()
-
-    while token ~= nil or i <= #toks do
-      local _tk = toks[i]
-
-      if  tk == nil
-      or _tk == nil
-      or tk.type  ~= _tk.type
-      or tk.value ~= _tk.value
-      then fail = true end
-
-      msg = msg .. "\t" .. tk_str(_tk) .. "\t\t" .. tk_str(tk) .. "\n"
-
-      i = i+1
-      tk = Lexer.next()
-    end
-
-    if fail then
-      if Lexer.err then
-        print("FAIL with", Lexer.err, str)
-      else print("FAIL:", str) end
-      print("\tEXPECTED\t\tTOKEN")
-      print(msg)
-    elseif loud then
-      print("CORRECT ", str)
-    end
-  end
-
-  local function test_error (str)
-    Lexer.open(str)
-    repeat
-      local tk = Lexer.next()
-    until tk == nil
-
-    if not Lexer.err then
-      print("FAIL: expected error for code:", str)
-    elseif loud then
-      print("CORRECT error: ", Lexer.err)
-      print("\tfor code:", str)
-    end
-  end
-
-  --[=[ Check Failure
-    test("+ -", KW("+"), KW("if"))
-
-    test("[[45]]", STR("56"))
-
-    test_error("[[2]]")
-    test("+ +", KW("+"))
-    test("+", KW("+"), KW("+"))
-  --]=]
-
-  test("+ -", KW("+"), KW("-"))
-  test(' "45" ', STR("45") )
-  test_error("[=45")
-  test("ifs", NAME("ifs"))
-  test("if", KW("if"))
-  test("if s", KW("if"), NAME("s"))
-  test("xo+", NAME("xo"), KW("+"))
-  test("_F", NAME("_F"))
-  test("else", KW("else"))
-  test("elseif", KW("elseif"))
-
-  test("+ --Hola\n", KW("+"))
-  test("+ --Hola", KW("+"))
-  test("-- comentario\nfoo", NAME("foo"))
-  test("--[=[comentario\n]]largo]=]+", KW("+"))
-
-  test("0", NUM("0"))
-  test("27", NUM("27"))
-  test("27.5", NUM("27.5"))
-  test(".002", NUM(".002"))
-  test("2E3", NUM("2E3"))
-  test("5E-3", NUM("5E-3"))
-  test("5E+1", NUM("5E+1"))
-  test(". 2", KW("."), NUM("2"))
-  test("2 .", NUM("2"), KW("."))
-  test("0x4", NUM("0x4"))
-
-  test_error("0x")
-  test_error("0xP1")
-  test_error("0E")
-  test_error("0E+")
-  test("0xAP2A", NUM("0xAP2"), NAME("A"))
-  test("08FF", NUM("08"), NAME("FF"))
-
-  test(".A", KW("."), NAME("A"))
-
-  test(".", KW("."))
-  test(". .", KW("."), KW("."))
-  test("..", KW(".."))
-  test("...", KW("..."))
-  test("....", KW("..."), KW("."))
-  test(".. ..", KW(".."), KW(".."))
-  test(".0.1..2.", NUM(".0"), NUM(".1"), KW(".."), NUM("2."))
-
-  test(">>> >=> =>> <=>",
-    KW(">>"), KW(">"),
-    KW(">="), KW(">"),
-    KW("="), KW(">>"),
-    KW("<="), KW(">")
-  )
-
-  test("\"ho'la\" 'ho\"la'", STR("ho'la"), STR('ho"la'))
-  test_error("'ho\nla'")
-  test_error('"ho\\kla"')
-  test('"a\\x62c"', STR("abc"))
-  test_error('"l\\x6m"')
-
-  test('"a\\u{62}c"', STR("abc"))
-  test_error('"a\\u{62o}c"')
-  test_error('"a\\u{62"')
-  test_error('"a\\u{fffffffff}c"')
-  test_error('"a\\u{}cde"')
-
-  test('"a \\z  \n\t  b"', STR("a b"))
-
-  test("'ho\\\nla'", STR("ho\nla"))
-  test("'ho\\\n\rla'", STR("ho\n\rla"))
-  test_error("'ho\\\n\nla'")
-
-
-  test([[
-  -- Stops the lexer and reports an error
-  function Lexer:error(msg)
-    self._error = msg
-    self.char = ""
-  end
-  ]],
-    KW("function"), NAME("Lexer"), KW(":"), NAME("error"),
-      KW("("), NAME("msg"), KW(")"),
-    NAME("self"), KW("."), NAME("_error"), KW("="), NAME("msg"),
-    NAME("self"), KW("."), NAME("char"), KW("="), STR(""),
-    KW("end")
-  )
+-- Gets a string with a token's position
+function Lexer.get_position (token)
+  return "line " .. token.lin .. ", column " .. token.column
 end
 
 return Lexer
