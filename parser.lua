@@ -13,7 +13,11 @@ end
 
 local function err (msg)
   if not Parser.error then
-    Parser.error = msg
+    local pos = " before end of file"
+    if token then
+      pos = " at " .. Lexer.get_position(token)
+    end
+    Parser.error = msg .. pos
     token = nil
   end
 end
@@ -61,11 +65,11 @@ local function expect (...)
   err(str .. " expected")
 end
 
-local function match (what, who, where)
+local function match (what, who)
   local tk = try(what)
   if tk then return tk end
   where = where or "?"
-  err(what .. " expected (to close " .. who .. " at " .. where .. ")")
+  err(what .. " expected (to close " .. who.type .. " at " .. Lexer.get_position(who) .. ")")
 end
 
 function Parser.simpleexp ()
@@ -115,7 +119,7 @@ function Parser.explist ()
 end
 
 function Parser.forstat ()
-  expect("for")
+  local kw = expect("for")
 
   local tk = expect("NAME")
   if not tk then return end
@@ -132,7 +136,7 @@ function Parser.forstat ()
 
     expect("do")
     local body = Parser.statlist()
-    match("end", "for")
+    match("end", kw)
     return {
       type="numfor", name=name, body=body,
       init=init, limit=limit, step=step
@@ -148,13 +152,13 @@ function Parser.forstat ()
     local explist = Parser.explist()
     expect("do")
     local body = Parser.statlist()
-    match("end", "for")
+    match("end", kw)
     return  {type="genfor", vars=names, explist=explist, body=body}
   else expect("=", ",", "in") end
 end
 
 function Parser.ifstat ()
-  expect("if")
+  local kw = expect("if")
   local clauses = {}
 
   local cond = Parser.expr()
@@ -180,7 +184,7 @@ function Parser.ifstat ()
     })
   end
 
-  match("end", "if")
+  match("end", kw)
 
   return { type="if", clauses=clauses }
 end
@@ -191,24 +195,27 @@ function Parser.statement ()
   elseif check("if") then
     return Parser.ifstat()
 
-  elseif try("while") then
+  elseif check("while") then
+    local kw = next()
     local cond = Parser.expr()
     expect("do")
     local body = Parser.statlist()
-    match("end", "while")
+    match("end", kw)
     return { type = "while", cond = cond, body = body }
 
-  elseif try("do") then
+  elseif check("do") then
+    local kw = next()
     local body = Parser.statlist()
-    match("end", "do")
+    match("end", kw)
     return { type = "do", body = body }
 
   elseif check("for") then
     return Parser.forstat()
 
-  elseif try("repeat") then
+  elseif check("repeat") then
+    local kw = next()
     local body = Parser.statlist()
-    match("until", "repeat")
+    match("until", kw)
     local cond = Parser.expr()
     return { type = "repeat", cond = cond, body = body }
 

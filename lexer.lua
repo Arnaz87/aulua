@@ -367,7 +367,7 @@ end
 
 -- Gets a string with a token's position
 function Lexer.get_position (token)
-  return "line " .. token.lin .. ", column " .. token.column
+  return "line " .. token.line .. ", column " .. token.column
 end
 
 return Lexer

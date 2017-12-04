@@ -1,7 +1,7 @@
 
 local Parser = require("parser")
 
-local loud = false
+local loud = true
 
 local function tostr (obj)
   if type(obj) ~= "table" then
