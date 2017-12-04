@@ -18,6 +18,11 @@ local function err (msg)
   end
 end
 
+local function grave (msg)
+  msg = "\x1b[1;31m[| " .. msg .. " |]\x1b[0;39m"
+  err(msg)
+end
+
 local function next ()
   if token == nil then return nil end
   local old = token
@@ -60,19 +65,13 @@ local function expect (...)
   err(str .. ") expected")
 end
 
-function Parser.const ()
-  if check("NUM") then
-    return { type="num", value = next().value }
-  elseif check("true", "false", "nil") then
-    return { type=next().type }
-  end
-end
-
 function Parser.simpleexp ()
   if check("NUM") then
-    return {type="num", value = next().value}
+    return { type = "num", value = next().value }
+  elseif check("true", "false", "nil") then
+    return { type = next().type }
   end
-  err("Most expressions are not yet supported")
+  grave("Expressions are not fully supported")
 end
 
 function Parser.expr ()
@@ -107,10 +106,25 @@ end
 
 function Parser.statement ()
   if try(";") then return nil
-  elseif try("do") then
-    local statlist = Parser.statlist()
+
+  elseif try("while") then
+    local cond = Parser.expr()
+    expect("do")
+    local body = Parser.statlist()
     expect("end")
-    return { type = "do", body = statlist }
+    return { type = "while", cond = cond, body = body }
+
+  elseif try("do") then
+    local body = Parser.statlist()
+    expect("end")
+    return { type = "do", body = body }
+
+  elseif try("repeat") then
+    local body = Parser.statlist()
+    expect("until")
+    local cond = Parser.expr()
+    return { type = "repeat", cond = cond, body = body }
+
   elseif try("local") then
     if try("function") then
       return err("Local function not yet supported")
@@ -129,8 +143,10 @@ function Parser.statement ()
 
       return {type="local", names=names, explist=explist}
     end
-  elseif try("return") then
-    return { type = "return" }
+
+  elseif check("return", "break") then
+    return { type = next().type }
+
   else err("ivalid statement") end
 end
 

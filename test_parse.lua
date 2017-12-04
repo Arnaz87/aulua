@@ -1,7 +1,7 @@
 
 local Parser = require("parser")
 
-local loud = true
+local loud = false
 
 local function tostr (obj)
   if type(obj) ~= "table" then
@@ -56,6 +56,7 @@ local function eq (t1, t2)
   return true
 end
 
+--[[
 local function test (meth, str, expected)
   Parser.open(str)
   local node = Parser[meth]()
@@ -68,10 +69,12 @@ local function test (meth, str, expected)
   end
 end
 
-test("const", "45", {type="num", value="45"})
-test("const", "nil", {type="nil"})
+test("expr", "45", {type="num", value="45"})
+test("expr", "nil", {type="nil"})
+]]
 
-
+-- Based on
+-- https://github.com/stravant/LuaMinify/blob/master/tests/test_parser.lua
 
 local source = [=[
 ;
@@ -116,7 +119,82 @@ do end do                               -- FAIL
 do end end                              -- FAIL
 do return end
 do return return end                    -- FAIL
-do break end                            -- FAIL
+do break end                  -- Semantic Error
+while                                   -- FAIL
+while do                                -- FAIL
+while =                                 -- FAIL
+while 1 do                              -- FAIL
+while 1 do end
+while 1 do local a end
+while 1 do local a local b end
+while 1 do local a; local b; end
+while 1 do 2 end                        -- FAIL
+while 1 do "foo" end                    -- FAIL
+while true do end
+while 1 do ; end
+while 1 do while                        -- FAIL
+while 1 end                             -- FAIL
+while 1 2 do                            -- FAIL
+while 1 = 2 do                          -- FAIL
+while 1 do return end
+while 1 do return return end            -- FAIL
+while 1 do do end end
+while 1 do do return end end
+while 1 do break end
+while 1 do break break end
+while 1 do do break end end
+repeat                                  -- FAIL
+repeat until                            -- FAIL
+repeat until 0
+repeat until false
+repeat until local                      -- FAIL
+repeat end                              -- FAIL
+repeat 1                                -- FAIL
+repeat =                                -- FAIL
+repeat local a until 1
+repeat local a local b until 0
+repeat local a; local b; until 0
+repeat ; until 1
+repeat 2 until 1                        -- FAIL
+repeat "foo" until 1                    -- FAIL
+repeat return until 0
+repeat return return until 0            -- FAIL
+repeat break until 0
+repeat break break until 0    -- Semantic Error
+repeat do end until 0
+repeat do return end until 0
+repeat do break end until 0
+for                                     -- fail   --LOUD
+for do                                  -- FAIL
+for end                                 -- FAIL
+for 1                                   -- FAIL
+for a                                   -- FAIL
+for true                                -- FAIL
+for a, in                               -- FAIL
+for a in                                -- FAIL
+for a do                                -- FAIL
+for a in do                             -- FAIL
+for a in b do                           -- FAIL
+for a in b end                          -- FAIL
+for a in b, do                          -- FAIL
+for a in b do end
+for a in b do local a local b end
+for a in b do local a; local b; end
+for a in b do 1 end                     -- FAIL
+for a in b do "foo" end                 -- FAIL
+for a b in                              -- FAIL
+for a, b, c in p do end
+for a, b, c in p, q, r do end
+for a in 1 do end
+for a in true do end
+for a in "foo" do end
+for a in b do break end
+for a in b do break break end           -- FAIL
+for a in b do return end
+for a in b do return return end         -- FAIL
+for a in b do do end end
+for a in b do do break end end
+for a in b do do return end end
 ]=]
 
 local function FAIL (line, msg)
@@ -131,6 +209,9 @@ local ix=1
 while ix < #source do
   local nix = source:find("\n", ix) or #source+1
   local line = source:sub(ix, nix-1)
+
+  if line:find("LOUD") ~= nil then loud = true end
+  if line:find("QUIT") ~= nil then break end
 
   local fail = line:find("FAIL") ~= nil
 
