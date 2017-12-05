@@ -228,11 +228,22 @@ function Parser.funcbody (kw)
   return {type = "body", vararg = vararg, args = names, body = body}
 end
 
+local function fieldsel (value)
+  local method
+  if try(".") then method = false
+  elseif try(":") then method = true
+  else return expect(".", ":") end
+
+  local name = get_name()
+  return {type="fieldsel", val=value, name=name, method=method}
+end
+
 function Parser.funcstat ()
   local kw = expect("function")
 
-  -- TODO: name {. name} [: name]
   local name = Parser.singlevar()
+  while check(".") do   name = fieldsel(name) end
+  if    check(":") then name = fieldsel(name) end
   
   local body = Parser.funcbody(kw)
 
