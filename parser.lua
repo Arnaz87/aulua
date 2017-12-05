@@ -44,6 +44,10 @@ local function check (...)
   return false
 end
 
+local function check_not (...)
+  return token and not check(...)
+end
+
 local function try (...)
   if check(...) then
     return next()
@@ -72,27 +76,18 @@ local function match (what, who)
   err(what .. " expected (to close " .. who.type .. " at " .. Lexer.get_position(who) .. ")")
 end
 
-function Parser.simpleexp ()
-  if check("NUM") then
-    return { type = "num", value = next().value }
-  elseif check("true", "false", "nil") then
-    return { type = next().type }
-  elseif try("...") then
-    return { type = "varargs" }
-  elseif check("NAME") then
-    return { type="var", value = next().value }
-  elseif check("STR") then
-    return { type="str", value = next().value }
-  end
+local function get_name ()
+  local tk = expect("NAME")
+  if tk then return tk.value
+  else return nil end
 end
 
-function Parser.expr ()
-  local exp = Parser.simpleexp()
-  if exp then return exp
-  else err("Invalid Expression") end
+function Parser.singlevar ()
+  local nm = get_name()
+  return { type="var", name=nm }
 end
 
-function Parser.prymaryexp ()
+function Parser.primaryexp ()
   if try("(") then
     local expr = Parser.expr()
     assert(expr)
@@ -100,13 +95,34 @@ function Parser.prymaryexp ()
     if not try(")") then
       return err(") expected") end -- TODO: Indicate position of (
   elseif check("NAME") then
-    return { type="var", value = next().value }
+    return Parser.singlevar()
   end
   err("unexpected symbol")
 end
 
 function Parser.suffixedexp ()
   local exp = Parser.primaryexp()
+  return exp
+end
+
+function Parser.simpleexp ()
+  if check("NUM") then
+    return { type = "num", value = next().value }
+  elseif check("true", "false", "nil") then
+    return { type = next().type }
+  elseif try("...") then
+    return { type = "varargs" }
+  elseif check("STR") then
+    return { type="str", value = next().value }
+  else
+    return Parser.suffixedexp()
+  end
+end
+
+function Parser.expr ()
+  local exp = Parser.simpleexp()
+  if exp then return exp
+  else err("Invalid Expression") end
 end
 
 function Parser.explist ()
@@ -189,6 +205,40 @@ function Parser.ifstat ()
   return { type="if", clauses=clauses }
 end
 
+-- Parameters and statlist
+function Parser.funcbody (kw)
+  local vararg = false
+  local names = {}
+  expect("(")
+
+  if not check(")") then
+    repeat
+      if check("NAME") then
+        table.insert(names, get_name())
+      elseif try("...") then
+        vararg = true
+        break
+      else expect("NAME", "...") end
+    until not try(",")
+  end
+  expect(")")
+
+  local body = Parser.statlist()
+  match("end", kw)
+  return {type = "body", vararg = vararg, args = names, body = body}
+end
+
+function Parser.funcstat ()
+  local kw = expect("function")
+
+  -- TODO: name {. name} [: name]
+  local name = Parser.singlevar()
+  
+  local body = Parser.funcbody(kw)
+
+  return { type = "funcstat", name = name, body = body}
+end
+
 function Parser.statement ()
   if try(";") then return nil
 
@@ -219,15 +269,19 @@ function Parser.statement ()
     local cond = Parser.expr()
     return { type = "repeat", cond = cond, body = body }
 
+  elseif check("function") then
+    return Parser.funcstat()
+
   elseif try("local") then
-    if try("function") then
-      return err("Local function not yet supported")
+    if check("function") then
+      local kw = expect("function")
+      local name = get_name()
+      local body = Parser.funcbody(kw)
+      return { type = "localfunc", name = name, body = body}
     else
       local names = {}
-      repeat
-        local var = expect("NAME")
-        if not var then return end
-        table.insert(names, var.value)
+
+      repeat table.insert(names, get_name())
       until not try(",")
 
       local explist = nil
@@ -240,7 +294,7 @@ function Parser.statement ()
 
   elseif try("return") then
     local list
-    if token and not check(";", "end", "else", "elseif", "until") then
+    if check_not(";", "end", "else", "elseif", "until") then
       list = Parser.explist()
     end
     try(";") -- Optional ;
@@ -249,12 +303,12 @@ function Parser.statement ()
   elseif try("break") then
     return { type = "break" }
 
-  else err("ivalid statement") end
+  else err("invalid statement") end
 end
 
 function Parser.statlist ()
   local statlist = {}
-  while token and not check("end", "else", "elseif", "until") do
+  while check_not("end", "else", "elseif", "until") do
     local stat = Parser.statement()
     if stat then
       table.insert(statlist, stat)

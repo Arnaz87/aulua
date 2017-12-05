@@ -1,12 +1,11 @@
 
 local Parser = require("parser")
 
-local loud = true
+local loud = false
 
 local function tostr (obj)
   if type(obj) ~= "table" then
     return tostring(obj) end
-
 
   if #obj > 0 then
     local str = "["
@@ -16,7 +15,6 @@ local function tostr (obj)
     end
     return str .. "]"
   end
-
 
   local first = true
   local str = "{"
@@ -29,7 +27,6 @@ local function tostr (obj)
   end
 
   local tp = (obj.type or ""):upper()
-
   if tp ~= "" and str == "{" then
     return tp
   else
@@ -60,8 +57,10 @@ end
 -- https://github.com/stravant/LuaMinify/blob/master/tests/test_parser.lua
 
 local source = [=[
+----- Empty chunk -----
 ;
 ; end                                   -- FAIL
+----- Simple local -----
 local                                   -- FAIL
 local;                                  -- FAIL
 local =                                 -- FAIL
@@ -70,6 +69,7 @@ local a
 local a;
 local a, b, c
 local a; local b local c;
+local a =                              -- FAIL
 local a = 1
 local a local b = a
 local a, b = 1, 2
@@ -83,6 +83,7 @@ local a = local                         -- FAIL
 local a, b, =                           -- FAIL
 local a, b = 1, local                   -- FAIL
 local a, b = , local                    -- FAIL
+----- Do statement -----
 do                                      -- FAIL
 end                                     -- FAIL
 do end
@@ -104,6 +105,7 @@ do return end
 do return return end                    -- FAIL
 do break end
 ;; do end ;;
+----- While statement -----
 while                                   -- FAIL
 while do                                -- FAIL
 while =                                 -- FAIL
@@ -127,6 +129,7 @@ while 1 do do return end end
 while 1 do break end
 while 1 do break break end
 while 1 do do break end end
+----- Repeat statement -----
 repeat                                  -- FAIL
 repeat until                            -- FAIL
 repeat until 0
@@ -148,7 +151,12 @@ repeat break break until 0
 repeat do end until 0
 repeat do return end until 0
 repeat do break end until 0
+----- Return and break -----
 break
+break 5                                 -- FAIL
+break break
+break return
+return break                            -- FAIL
 return
 return;
 return return                           -- FAIL
@@ -161,7 +169,9 @@ return a,b,c,d
 return 1,2;
 return ...
 return 1,a,...
+return 1,...,2
 return ...,1,2
+----- If statement -----
 if                                      -- FAIL
 elseif                                  -- FAIL
 else                                    -- FAIL
@@ -191,6 +201,7 @@ if 1 then break end
 if 1 then return end
 if 1 then return return end             -- FAIL
 if 1 then end; if 1 then end;
+----- Numeric for -----
 for                                     -- FAIL
 for do                                  -- FAIL
 for end                                 -- FAIL
@@ -221,6 +232,7 @@ for a = 1, 2 do return return end       -- FAIL
 for a = p, q do do end end
 for a = p, q do do break end end
 for a = p, q do do return end end
+----- Generic for -----
 for a, in                               -- FAIL
 for a in                                -- FAIL
 for a do                                -- FAIL
@@ -246,6 +258,116 @@ for a in b do return return end         -- FAIL
 for a in b do do end end
 for a in b do do break end end
 for a in b do do return end end
+----- Local function -----
+local function                          -- FAIL
+local function 1                        -- FAIL
+local function end                      -- FAIL
+local function a                        -- FAIL
+local function a end                    -- FAIL
+local function a( end                   -- FAIL
+local function a() end
+local function a(1                      -- FAIL
+local function a(1) end                 -- FAIL
+local function a("foo"                  -- FAIL
+local function a(p                      -- FAIL
+local function a(p,)                    -- FAIL
+local function a(p) end
+local function a(p q) end               -- FAIL
+local function a(p,q,) end              -- FAIL
+local function a(p,q,r) end
+local function a(p,q,1) end             -- FAIL
+local function a(p) do                  -- FAIL
+local function a(p) 1 end               -- FAIL
+local function a(p) return end
+local function a(p) break end
+local function a(p) return return end   -- FAIL
+local function a(p) do end end
+local function a.b() end                -- FAIL
+local function a:b() end                -- FAIL
+local function a.b:c() end              -- FAIL
+local function a[b]() end               -- FAIL
+local function a(...) end
+local function a(p,...) end
+local function a(...,p) end             -- FAIL
+local function a(p,q,r,...) end
+local function a() local a local b end
+local function a() local a; local b; end
+local function a() end; local function a() end;
+----- Function statement -----
+function                                -- FAIL
+function 1                              -- FAIL
+function end                            -- FAIL
+function a                              -- FAIL
+function a end                          -- FAIL
+function a( end                         -- FAIL
+function a() end
+function a(1                            -- FAIL
+function a("foo"                        -- FAIL
+function a(1) end                       -- FAIL
+function a(p                            -- FAIL
+function a(p,)                          -- FAIL
+function a(p q                          -- FAIL
+function a(p) end
+function a(p,q,) end                    -- FAIL
+function a(p,q,r) end
+function a(p,q,1) end                   -- FAIL
+function a(p) do                        -- FAIL
+function a(p) 1 end                     -- FAIL
+function a(p) return end
+function a(p) break end
+function a(p) return return end         -- FAIL
+function a(p) do end end
+function a.(                            -- FAIL
+function a.1                            -- FAIL
+function a.b() end
+function a.b,                           -- FAIL
+function a.b.(                          -- FAIL
+function a.b.c.d() end
+function a:                             -- FAIL
+function a:1                            -- FAIL
+function a:b() end
+function a:b:                           -- FAIL
+function a:b.                           -- FAIL
+function a.b.c:d() end
+function a(...) end
+function a(...,                         -- FAIL
+function a(p,...) end
+function a(p,q,r,...) end
+function a(p,...,q) end                 -- FAIL
+function a() local a local b end
+function a() local a; local b; end
+function a() end; function a() end;
+function a:b:c() end                    -- FAIL
+function a[b].c() end                   -- FAIL
+function a(b).c end                     -- FAIL
+function a(b).c() end                   -- FAIL
+----- Assignment ----- LOUD
+a                                       -- FAIL
+a,                                      -- FAIL
+a,b,c                                   -- FAIL
+a,b =                                   -- FAIL
+a = 1
+a = 1,2,3
+a,b,c = 1
+a,b,c = 1,2,3
+a.b = 1
+a.b.c = 1
+a[b] = 1
+a[b][c] = 1
+a.b[c] = 1
+a[b].c = 1
+0 =                                     -- FAIL
+"foo" =                                 -- FAIL
+true =                                  -- FAIL
+(a) =                                   -- FAIL
+{} =                                    -- FAIL
+a:b() =                                 -- FAIL
+a() =                                   -- FAIL
+a.b:c() =                               -- FAIL
+a[b]() =                                -- FAIL
+a = a b                                 -- FAIL
+a = 1 2                                 -- FAIL
+a = a = 1                               -- FAIL
 ]=]
 
 local function FAIL (line, msg)
