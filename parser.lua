@@ -33,7 +33,8 @@ end
 function next ()
   if token == nil then return nil end
   local old = token
-  token = Lexer.next()
+  token = _lookahead or Lexer.next()
+  _lookahead = nil
 
   -- Propagate lexer errors
   if Lexer.error then
@@ -92,6 +93,11 @@ function get_name ()
   else return nil end
 end
 
+function lookahead ()
+  _lookahead = _lookahead or Lexer.next()
+  return _lookahead
+end
+
 --------------------------------------------------------------------------------
 ----                              Expressions                               ----
 --------------------------------------------------------------------------------
@@ -118,8 +124,30 @@ end
 
 function constructor ()
   local tk = expect("{")
+  local fields = {}
+
+  while check_not("}") do
+    if try("[") then
+      local key = Parser.expr()
+      expect("]")
+      expect("=")
+      local value = Parser.expr()
+      table.insert(fields, { type="key", key=key, value=value })
+
+    elseif check("NAME") and lookahead() and lookahead().type == "=" then
+      local name = get_name()
+      expect("=")
+      local value = Parser.expr()
+      table.insert(fields, { type="namekey", name=name, value=value })
+
+    else
+      local exp = Parser.expr()
+      table.insert(fields, { type="value", value=exp })
+    end
+  end
   match("}", tk)
-  return { type = "constructor" }
+
+  return { type = "constructor", fields=fields }
 end
 
 function funcargs (exp, method)

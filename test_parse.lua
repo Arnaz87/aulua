@@ -528,7 +528,7 @@ a = a, b, ...
 a = (...)
 a = ..., 1, 2
 a = function() return ... end
------ Operators ----- LOUD
+----- Operators -----
 a = -10
 a = -"foo"
 a = -a
@@ -612,6 +612,45 @@ a = {} and {} or {}
 a = (1) and ("foo") or (nil)
 a = function() end == function() end
 a = function() end or function() end
+----- Constructors ----- LOUD
+a = {                                   -- FAIL
+a = {}
+a = {,}                                 -- FAIL
+a = {;}                                 -- FAIL
+a = {,,}                                -- FAIL
+a = {;;}                                -- FAIL
+a = {{                                  -- FAIL
+a = {{{}}}
+a = {{},{},{{}},}
+a = { 1 }
+a = { 1, }
+a = { 1; }
+a = { 1, 2 }
+a = { a, b, c, }
+a = { true; false, nil; }
+a = { a.b, a[b]; a:c(), }
+a = { 1 + 2, a > b, "a" or "b" }
+a = { a=1, }
+a = { a=1, b="foo", c=nil }
+a = { a                                 -- FAIL
+a = { a=                                -- FAIL
+a = { a= }                              -- FAIL
+a = { a=, }                             -- FAIL
+a = { a=; }                             -- FAIL
+a = { 1, a="foo"                        -- FAIL
+a = { 1, a="foo"; b={}, d=true; }
+a = { 1=2 }                             -- FAIL
+a = { a.b=1 }                           -- FAIL
+a = { "foo"=a }                         -- FAIL
+a = { [                                 -- FAIL
+a = { [1                                -- FAIL
+a = { [1]                               -- FAIL
+a = { [1 }                              -- FAIL
+a = { [1] }                             -- FAIL
+a = { [a]=                              -- FAIL
+a = { ["foo"]="bar" }
+a = { [1]=a, [2]=b, }
+a = { true, a=1; ["foo"]="bar", }
 ]=]
 
 local function FAIL (line, msg)
