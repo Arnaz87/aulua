@@ -113,7 +113,7 @@ function Parser.primaryexp ()
   elseif check("NAME") then
     return Parser.singlevar()
   end
-  err("unexpected symbol")
+  err("unexpected symbol") -- TODO: Not very helpful
 end
 
 function constructor ()
@@ -171,14 +171,63 @@ function Parser.simpleexp ()
     return { type = "varargs" }
   elseif check("STR") then
     return { type="str", value = next().value }
+  elseif check("{") then
+    return constructor()
+  elseif check("function") then
+    local kw = next()
+    return Parser.funcbody(kw)
   else
     return Parser.suffixedexp()
   end
 end
 
-function Parser.expr ()
-  local exp = Parser.simpleexp()
-  if exp then return exp
+priority = {
+  -- [1]: left, [2]: right
+  ["+"]={10, 10},
+  ["-"]={10, 10},
+  ["*"]={11, 11},
+  ["%"]={11, 11},
+  ["^"]={14, 13}, -- right associative
+  ["/"]={11, 11},
+  ["//"]={11, 11},
+  ["&"]={6, 6},
+  ["|"]={4, 4},
+  ["~"]={5, 5},
+  ["<<"]={7, 7},
+  [">>"]={7, 7},
+  [".."]={9, 8}, -- right associative
+  ["<"]={3, 3},
+  [">"]={3, 3},
+  ["=="]={3, 3},
+  ["~="]={3, 3},
+  ["<="]={3, 3},
+  [">="]={3, 3},
+  ["and"]={2, 2},
+  ["or"]={1, 1}
+}
+unary_priority = 12
+
+function Parser.expr (limit)
+  limit = limit or 0
+
+  local left
+  if check("not", "-", "~", "#") then
+    left = {
+      type = "unop",
+      op = next().type,
+      expr = Parser.expr(unary_priority)
+    }
+  else left = Parser.simpleexp() end
+
+  local prio = token and priority[token.type]
+  while prio and prio[1] > limit do
+    local op = next().type
+    local right = Parser.expr(prio[2])
+    left = {type = "binop", op=op, left=left, right=right}
+    prio = token and priority[token.type]
+  end
+
+  if left then return left
   else err("Invalid Expression") end
 end
 
@@ -211,7 +260,7 @@ function Parser.funcbody (kw)
 
   local body = Parser.statlist()
   match("end", kw)
-  return {type = "body", vararg = vararg, args = names, body = body}
+  return {type = "function", vararg = vararg, args = names, body = body}
 end
 
 function fieldsel (value, method)

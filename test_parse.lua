@@ -217,7 +217,7 @@ if 1 then local a; elseif 2 then local b; end
 if 1 then elseif 2 then else end
 if 1 then else if 2 then end end
 if 1 then else if 2 then end            -- FAIL
-if 1 then break end
+if 1 then break end           -- Semantic Error
 if 1 then return end
 if 1 then return return end             -- FAIL
 if 1 then end; if 1 then end;
@@ -397,7 +397,7 @@ a,b,(c.d) = 1                           -- FAIL
 a = a b                                 -- FAIL
 a = 1 2                                 -- FAIL
 a = a = 1                               -- FAIL
------ Function calls ----- LOUD
+----- Function calls -----
 a(                                      -- FAIL
 a()
 a(1)
@@ -468,6 +468,150 @@ a{}"foo"
 a{}{}
 (a):b{}.c[d]:e{}
 (a):b{}[c].d:e{}
+----- Simple exressions -----
+a =                                     -- FAIL
+a = a
+a = nil
+a = false
+a = 1
+a = "foo"
+a = [[foo]]
+a = {}
+a = (a)
+a = (nil)
+a = (true)
+a = (1)
+a = ("foo")
+a = ([[foo]])
+a = ({})
+a = a.b
+a = a.b.                                -- FAIL
+a = a.b.c
+a = a:b                                 -- FAIL
+a = a[b]
+a = a[1]
+a = a["foo"]
+a = a[b][c]
+a = a.b[c]
+a = a[b].c
+a = (a)[b]
+a = (a).c
+a = ()                                  -- FAIL
+a = a()
+a = a.b()
+a = a[b]()
+a = a:b()
+a = (a)()
+a = (a).b()
+a = (a)[b]()
+a = (a):b()
+a = a"foo"
+a = a{}
+a = function                            -- FAIL
+a = function 1                          -- FAIL
+a = function a                          -- FAIL
+a = function end                        -- FAIL
+a = function(                           -- FAIL
+a = function() end
+a = function(1                          -- FAIL
+a = function(p) end
+a = function(p,)                        -- FAIL
+a = function(p q                        -- FAIL
+a = function(p,q,r) end
+a = function(p,q,1                      -- FAIL
+a = function(...) end
+a = function(...,                       -- FAIL
+a = function(p,...) end
+a = function(p,q,r,...) end
+a = ...
+a = a, b, ...
+a = (...)
+a = ..., 1, 2
+a = function() return ... end
+----- Operators ----- LOUD
+a = -10
+a = -"foo"
+a = -a
+a = -nil
+a = -true
+a = -{}
+a = -function() end
+a = -a()
+a = -(a)
+a = -                                   -- FAIL
+a = not 10
+a = not "foo"
+a = not a
+a = not nil
+a = not true
+a = not {}
+a = not function() end
+a = not a()
+a = not (a)
+a = not                                 -- FAIL
+a = #10
+a = #"foo"
+a = #a
+a = #nil
+a = #true
+a = #{}
+a = #function() end
+a = #a()
+a = #(a)
+a = #                                   -- FAIL
+a = 1 + 2; a = 1 - 2
+a = 1 * 2; a = 1 / 2
+a = 1 ^ 2; a = 1 % 2
+a = 1 .. 2
+a = 1 +                                 -- FAIL
+a = 1 ..                                -- FAIL
+a = 1 * /                               -- FAIL
+a = 1 + -2; a = 1 - -2
+a = 1 * -                               -- FAIL
+a = 1 * not 2; a = 1 / not 2
+a = 1 / not                             -- FAIL
+a = 1 * #"foo"; a = 1 / #"foo"
+a = 1 / #                               -- FAIL
+a = 1 + 2 - 3 * 4 / 5 % 6 ^ 7
+a = ((1 + 2) - 3) * (4 / (5 % 6 ^ 7))
+a = (1 + (2 - (3 * (4 / (5 % 6 ^ ((7)))))))
+a = ((1                                 -- FAIL
+a = ((1 + 2)                            -- FAIL
+a = 1)                                  -- FAIL
+a = a + b - c
+a = "foo" + "bar"
+a = "foo".."bar".."baz"
+a = true + false - nil
+a = {} * {}
+a = function() end / function() end
+a = a() ^ b()
+a = ... % ...
+----- More operators -----
+a = 1 == 2; a = 1 ~= 2
+a = 1 < 2; a = 1 <= 2
+a = 1 > 2; a = 1 >= 2
+a = 1 < 2 < 3
+a = 1 >= 2 >= 3
+a = 1 ==                                -- FAIL
+a = ~= 2                                -- FAIL
+a = "foo" == "bar"
+a = "foo" > "bar"
+a = a ~= b
+a = true == false
+a = 1 and 2; a = 1 or 2
+a = 1 and                               -- FAIL
+a = or 1                                -- FAIL
+a = 1 and 2 and 3
+a = 1 or 2 or 3
+a = 1 and 2 or 3
+a = a and b or c
+a = a() and (b)() or c.d
+a = "foo" and "bar"
+a = true or false
+a = {} and {} or {}
+a = (1) and ("foo") or (nil)
+a = function() end == function() end
+a = function() end or function() end
 ]=]
 
 local function FAIL (line, msg)
