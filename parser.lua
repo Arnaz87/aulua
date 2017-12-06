@@ -1,9 +1,14 @@
 
-local Lexer = require("lexer")
+-- Lua magic to not pollute the global namespace
+_ENV = setmetatable({}, {__index = _ENV})
 
-local Parser = {}
+Lexer = require("lexer")
 
-local token
+Parser = {}
+
+------------------------------------------------------------
+----                      General                       ----
+------------------------------------------------------------
 
 function Parser.open (text)
   Lexer.open(text)
@@ -11,30 +16,35 @@ function Parser.open (text)
   Parser.error = nil
 end
 
-local function err (msg)
-  if not Parser.error then
-    local pos = " before end of file"
-    if token then
-      pos = " at " .. Lexer.get_position(token)
-    end
-    Parser.error = msg .. pos
-    token = nil
+function err (msg)
+  local pos = "<eof>"
+  if token then
+    pos = token.line .. ":" .. token.column
   end
+  Parser.error = pos .. ": " .. msg
+  error(Parser.error)
 end
 
-local function grave (msg)
+function grave (msg)
   msg = "\x1b[1;31m[| " .. msg .. " |]\x1b[0;39m"
   err(msg)
 end
 
-local function next ()
+function next ()
   if token == nil then return nil end
   local old = token
   token = Lexer.next()
+
+  -- Propagate lexer errors
+  if Lexer.error then
+    Parser.error = Lexer.error
+    error(Parser.error)
+  end
+
   return old
 end
 
-local function check (...)
+function check (...)
   if token == nil then return false end
   local types = table.pack(...)
   for i, tp in pairs(types) do
@@ -44,17 +54,17 @@ local function check (...)
   return false
 end
 
-local function check_not (...)
+function check_not (...)
   return token and not check(...)
 end
 
-local function try (...)
+function try (...)
   if check(...) then
     return next()
   else return nil end
 end
 
-local function expect (...)
+function expect (...)
   local tk = try(...)
   if tk then return tk end
 
@@ -69,18 +79,22 @@ local function expect (...)
   err(str .. " expected")
 end
 
-local function match (what, who)
+function match (what, who)
   local tk = try(what)
   if tk then return tk end
-  where = where or "?"
-  err(what .. " expected (to close " .. who.type .. " at " .. Lexer.get_position(who) .. ")")
+  local where = who.line .. ":" .. who.column
+  err(what .. " expected (to close " .. who.type .. " at " .. where .. ")")
 end
 
-local function get_name ()
+function get_name ()
   local tk = expect("NAME")
   if tk then return tk.value
   else return nil end
 end
+
+------------------------------------------------------------
+----                    Expressions                     ----
+------------------------------------------------------------
 
 function Parser.singlevar ()
   local nm = get_name()
@@ -88,21 +102,47 @@ function Parser.singlevar ()
 end
 
 function Parser.primaryexp ()
-  if try("(") then
+  if check("(") then
+    local tk = expect("(")
+
     local expr = Parser.expr()
     assert(expr)
 
-    if not try(")") then
-      return err(") expected") end -- TODO: Indicate position of (
+    match(")", tk)
+    return expr
   elseif check("NAME") then
     return Parser.singlevar()
   end
   err("unexpected symbol")
 end
 
+function funcargs (exp, method)
+  expect("(")
+  --local arg = Parser.expr()
+  expect(")")
+  return {type="call", expr=exp}
+end
+
 function Parser.suffixedexp ()
   local exp = Parser.primaryexp()
-  return exp
+  while true do
+    if check(".") then
+      exp = fieldsel(exp)
+
+    elseif try("[") then
+      local index = Parser.expr()
+      expect("]")
+      exp = {type="index", expr=exp, index=index}
+
+    elseif check(":") then
+      exp = fieldsel(exp, true)
+      exp = funcargs(exp, true)
+
+    elseif check("(", "{", "STRING") then
+      exp = funcargs(exp)
+
+    else return exp end
+  end
 end
 
 function Parser.simpleexp ()
@@ -133,6 +173,41 @@ function Parser.explist ()
   until not try(",")
   return list
 end
+
+-- Parameters and statlist
+function Parser.funcbody (kw)
+  local vararg = false
+  local names = {}
+  expect("(")
+
+  if not check(")") then
+    repeat
+      if check("NAME") then
+        table.insert(names, get_name())
+      elseif try("...") then
+        vararg = true
+        break
+      else expect("NAME", "...") end
+    until not try(",")
+  end
+  expect(")")
+
+  local body = Parser.statlist()
+  match("end", kw)
+  return {type = "body", vararg = vararg, args = names, body = body}
+end
+
+function fieldsel (value, method)
+  if method then expect(":")
+  else expect(".") end
+
+  local name = get_name()
+  return {type="fieldsel", val=value, name=name}
+end
+
+------------------------------------------------------------
+----                     Statements                     ----
+------------------------------------------------------------
 
 function Parser.forstat ()
   local kw = expect("for")
@@ -193,61 +268,31 @@ function Parser.ifstat ()
     })
   end
 
+  local els
   if try("else") then
-    body = Parser.statlist()
-    table.insert(clauses, {
-      type="clause", body=body
-    })
+    els = Parser.statlist()
   end
 
   match("end", kw)
 
-  return { type="if", clauses=clauses }
-end
-
--- Parameters and statlist
-function Parser.funcbody (kw)
-  local vararg = false
-  local names = {}
-  expect("(")
-
-  if not check(")") then
-    repeat
-      if check("NAME") then
-        table.insert(names, get_name())
-      elseif try("...") then
-        vararg = true
-        break
-      else expect("NAME", "...") end
-    until not try(",")
-  end
-  expect(")")
-
-  local body = Parser.statlist()
-  match("end", kw)
-  return {type = "body", vararg = vararg, args = names, body = body}
-end
-
-local function fieldsel (value)
-  local method
-  if try(".") then method = false
-  elseif try(":") then method = true
-  else return expect(".", ":") end
-
-  local name = get_name()
-  return {type="fieldsel", val=value, name=name, method=method}
+  return { type="if", clauses=clauses, els=els }
 end
 
 function Parser.funcstat ()
   local kw = expect("function")
 
-  local name = Parser.singlevar()
-  while check(".") do   name = fieldsel(name) end
-  if    check(":") then name = fieldsel(name) end
+  local name , method = Parser.singlevar()
+  while check(".") do
+    name = fieldsel(name)
+  end
+  if check(":") then
+    name = fieldsel(name, true)
+    method = true
+  end
   
   local body = Parser.funcbody(kw)
 
-  return { type = "funcstat", name = name, body = body}
+  return { type = "funcstat", name = name, body = body, method = method }
 end
 
 function Parser.statement ()
@@ -300,8 +345,13 @@ function Parser.statement ()
         explist = Parser.explist()
       end
 
-      return {type="local", names=names, explist=explist}
+      return { type = "local", names=names, explist=explist }
     end
+
+  elseif try("::") then
+    local name = get_name()
+    expect("::")
+    return {type = "label", name = name}
 
   elseif try("return") then
     local list
@@ -314,7 +364,31 @@ function Parser.statement ()
   elseif try("break") then
     return { type = "break" }
 
-  else err("invalid statement") end
+  elseif try("goto") then
+    local name = get_name()
+    return { type = "goto", label = name}
+
+  else
+    local expr = Parser.suffixedexp()
+    if check(",", "=") then -- Assignment
+      local vars = {expr}
+      while try(",") do
+        expr = Parser.suffixedexp()
+        table.insert(vars, expr)
+      end
+      expect("=")
+
+      local explist = Parser.explist()
+
+      return {type = "assignment", vars = vars, explist = explist}
+
+    else -- Function Call
+      if expr.type ~= "call" then
+        err("Only call expressions are valid statements")
+      end
+      return expr
+    end
+  end
 end
 
 function Parser.statlist ()
@@ -329,11 +403,32 @@ function Parser.statlist ()
   return statlist
 end
 
-function Parser.program ()
+function parse_program ()
   local statlist = Parser.statlist()
-  if not Parser.error and not token
-    then return statlist
-  else err("end of file expected") end
+  if token then err("end of file expected") end
+  return statlist
+end
+
+function Parser.program ()
+
+  local trace
+
+  status, prog = xpcall(parse_program, function (msg)
+    if Parser.error == nil then
+      trace = debug.traceback(msg, 2)
+    end
+  end)
+
+  if trace then
+    --print("\x1b[31mInternal Parser Error\x1b[39m")
+    print(trace)
+    os.exit(1)
+  end
+
+  if status then return prog
+  elseif Parser.error
+  then return nil, tk
+  else error(tk) end
 end
 
 return Parser

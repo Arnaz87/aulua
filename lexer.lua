@@ -301,9 +301,4 @@ function Lexer.tokens ()
     return tokens end
 end
 
--- Gets a string with a token's position
-function Lexer.get_position (token)
-  return "line " .. token.line .. ", column " .. token.column
-end
-
 return Lexer

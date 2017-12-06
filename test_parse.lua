@@ -151,7 +151,7 @@ repeat break break until 0
 repeat do end until 0
 repeat do return end until 0
 repeat do break end until 0
------ Return and break -----
+----- Return & break -----
 break
 break 5                                 -- FAIL
 break break
@@ -171,6 +171,26 @@ return ...
 return 1,a,...
 return 1,...,2
 return ...,1,2
+----- Label & goto -----
+::                                      -- FAIL
+::a                                     -- FAIL
+::a::
+::5::                                   -- FAIL
+::a, b::                                -- FAIL
+::a b::                                 -- FAIL
+::a:: ::                                -- FAIL
+:: ::a::                                -- FAIL
+::a:: ::b::
+::a::; ::b::;
+::a:: return
+goto                                    -- FAIL
+goto a
+goto 5                                  -- FAIL
+goto a, b                               -- FAIL
+goto a goto b
+goto a; goto b;
+goto a ::b::
+::a:: goto b ::c::
 ----- If statement -----
 if                                      -- FAIL
 elseif                                  -- FAIL
@@ -353,18 +373,22 @@ a,b,c = 1,2,3
 a.b = 1
 a.b.c = 1
 a[b] = 1
-a[b][c] = 1
+a[b][4] = 1
 a.b[c] = 1
 a[b].c = 1
-0 =                                     -- FAIL
-"foo" =                                 -- FAIL
-true =                                  -- FAIL
-(a) =                                   -- FAIL
-{} =                                    -- FAIL
-a:b() =                                 -- FAIL
-a() =                                   -- FAIL
-a.b:c() =                               -- FAIL
-a[b]() =                                -- FAIL
+(a)[b].c = 1
+(4).c = 1
+("foo")["bar"] = 1
+a.b, c[d] = 1,2,3
+0 = 1                                   -- FAIL
+"foo" = 1                               -- FAIL
+true = 1                                -- FAIL
+(a) = 1                                 -- FAIL
+{} = 1                                  -- FAIL
+a:b() = 1                               -- FAIL
+a() = 1                                 -- FAIL
+a.b:c() = 1                             -- FAIL
+a[b]() = 1                              -- FAIL
 a = a b                                 -- FAIL
 a = 1 2                                 -- FAIL
 a = a = 1                               -- FAIL
