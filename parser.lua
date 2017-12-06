@@ -6,9 +6,9 @@ Lexer = require("lexer")
 
 Parser = {}
 
-------------------------------------------------------------
-----                      General                       ----
-------------------------------------------------------------
+--------------------------------------------------------------------------------
+----                                General                                 ----
+--------------------------------------------------------------------------------
 
 function Parser.open (text)
   Lexer.open(text)
@@ -92,9 +92,9 @@ function get_name ()
   else return nil end
 end
 
-------------------------------------------------------------
-----                    Expressions                     ----
-------------------------------------------------------------
+--------------------------------------------------------------------------------
+----                              Expressions                               ----
+--------------------------------------------------------------------------------
 
 function Parser.singlevar ()
   local nm = get_name()
@@ -116,11 +116,28 @@ function Parser.primaryexp ()
   err("unexpected symbol")
 end
 
+function constructor ()
+  local tk = expect("{")
+  match("}", tk)
+  return { type = "constructor" }
+end
+
 function funcargs (exp, method)
-  expect("(")
-  --local arg = Parser.expr()
-  expect(")")
-  return {type="call", expr=exp}
+  local args = {}
+
+  if check("STR") then
+    args = { Parser.simpleexp() }
+  elseif check("{") then
+    args = { constructor() }
+  else
+    local tk = expect("(")
+    if check_not(")") then
+      args = Parser.explist()
+    end
+    match(")", tk)
+  end
+
+  return {type="call", expr=exp, args=args}
 end
 
 function Parser.suffixedexp ()
@@ -138,7 +155,7 @@ function Parser.suffixedexp ()
       exp = fieldsel(exp, true)
       exp = funcargs(exp, true)
 
-    elseif check("(", "{", "STRING") then
+    elseif check("(", "{", "STR") then
       exp = funcargs(exp)
 
     else return exp end
@@ -205,9 +222,9 @@ function fieldsel (value, method)
   return {type="fieldsel", val=value, name=name}
 end
 
-------------------------------------------------------------
-----                     Statements                     ----
-------------------------------------------------------------
+--------------------------------------------------------------------------------
+----                               Statements                               ----
+--------------------------------------------------------------------------------
 
 function Parser.forstat ()
   local kw = expect("for")
@@ -278,23 +295,6 @@ function Parser.ifstat ()
   return { type="if", clauses=clauses, els=els }
 end
 
-function Parser.funcstat ()
-  local kw = expect("function")
-
-  local name , method = Parser.singlevar()
-  while check(".") do
-    name = fieldsel(name)
-  end
-  if check(":") then
-    name = fieldsel(name, true)
-    method = true
-  end
-  
-  local body = Parser.funcbody(kw)
-
-  return { type = "funcstat", name = name, body = body, method = method }
-end
-
 function Parser.statement ()
   if try(";") then return nil
 
@@ -326,7 +326,20 @@ function Parser.statement ()
     return { type = "repeat", cond = cond, body = body }
 
   elseif check("function") then
-    return Parser.funcstat()
+    local kw = expect("function")
+
+    local name , method = Parser.singlevar()
+    while check(".") do
+      name = fieldsel(name)
+    end
+    if check(":") then
+      name = fieldsel(name, true)
+      method = true
+    end
+    
+    local body = Parser.funcbody(kw)
+
+    return { type = "funcstat", name = name, body = body, method = method }
 
   elseif try("local") then
     if check("function") then
@@ -370,7 +383,8 @@ function Parser.statement ()
 
   else
     local expr = Parser.suffixedexp()
-    if check(",", "=") then -- Assignment
+    if expr.type == "call" then return expr
+    else -- If it's not a call, it can be a var, index, fieldsel or parenthesis
       local vars = {expr}
       while try(",") do
         expr = Parser.suffixedexp()
@@ -381,12 +395,6 @@ function Parser.statement ()
       local explist = Parser.explist()
 
       return {type = "assignment", vars = vars, explist = explist}
-
-    else -- Function Call
-      if expr.type ~= "call" then
-        err("Only call expressions are valid statements")
-      end
-      return expr
     end
   end
 end

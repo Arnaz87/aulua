@@ -361,13 +361,14 @@ function a:b:c() end                    -- FAIL
 function a[b].c() end                   -- FAIL
 function a(b).c end                     -- FAIL
 function a(b).c() end                   -- FAIL
------ Assignment ----- LOUD
+----- Assignment -----
 a                                       -- FAIL
 a,                                      -- FAIL
 a,b,c                                   -- FAIL
 a,b =                                   -- FAIL
 a = 1
 a = 1,2,3
+a, = 1                                  -- FAIL
 a,b,c = 1
 a,b,c = 1,2,3
 a.b = 1
@@ -384,14 +385,89 @@ a.b, c[d] = 1,2,3
 "foo" = 1                               -- FAIL
 true = 1                                -- FAIL
 (a) = 1                                 -- FAIL
+(a.b[1]) = 1                            -- FAIL
 {} = 1                                  -- FAIL
 a:b() = 1                               -- FAIL
 a() = 1                                 -- FAIL
 a.b:c() = 1                             -- FAIL
 a[b]() = 1                              -- FAIL
+a,2 = 1                                 -- FAIL
+a,(b) = 1                               -- FAIL
+a,b,(c.d) = 1                           -- FAIL
 a = a b                                 -- FAIL
 a = 1 2                                 -- FAIL
 a = a = 1                               -- FAIL
+----- Function calls ----- LOUD
+a(                                      -- FAIL
+a()
+a(1)
+a(1,)                                   -- FAIL
+a(1,2,3)
+1()                                     -- FAIL
+a()()
+a.b()
+a[b]()
+a.1                                     -- FAIL
+a.b                                     -- FAIL
+a[b]                                    -- FAIL
+a.b.(                                   -- FAIL
+a.b.c()
+a[b][c]()
+a[b].c()
+a.b[c]()
+a:b()
+a:b                                     -- FAIL
+a:1                                     -- FAIL
+a.b:c()
+a[b]:c()
+a:b:                                    -- FAIL
+a:b():c()
+a:b().c[d]:e()
+a:b()[c].d:e()
+(a)()
+()()                                    -- FAIL
+(1)()
+("foo")()
+(true)()
+(a)()()
+(a.b)()
+(a[b])()
+(a).b()
+(a)[b]()
+(a):b()
+(a).b[c]:d()
+(a)[b].c:d()
+(a):b():c()
+(a):b().c[d]:e()
+(a):b()[c].d:e()
+----- More function calls -----
+a"foo"
+a[[foo]]
+a.b"foo"
+a[b]"foo"
+a:b"foo"
+a{}
+a.b{}
+a[b]{}
+a:b{}
+a()"foo"
+a"foo"()
+a"foo".b()
+a"foo"[b]()
+a"foo":c()
+a"foo""bar"
+a"foo"{}
+(a):b"foo".c[d]:e"bar"
+(a):b"foo"[c].d:e"bar"
+a(){}
+a{}()
+a{}.b()
+a{}[b]()
+a{}:c()
+a{}"foo"
+a{}{}
+(a):b{}.c[d]:e{}
+(a):b{}[c].d:e{}
 ]=]
 
 local function FAIL (line, msg)
