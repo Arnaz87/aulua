@@ -1,4 +1,66 @@
 
+--[[
+  My main references for this were, in order:
+  - The C lua source code
+    https://www.lua.org/source/5.3/lparser.c.html
+  - LuaMinify
+    https://github.com/stravant/LuaMinify/blob/master/ParseLua.lua
+  - To a lesser extent, this javascript parser
+    https://github.com/oxyc/luaparse/blob/master/luaparse.js
+
+  AST Structure
+  - STR: A pure string
+  - BOOL: A pure boolean
+  - node: An instance of the indicated node
+  - type?: A value of a type or nothing at all
+  - [type]: A sequence of zero or more values of a type
+  - node|node: An instance of any of the nodes (only nodes)
+  - #category: not a node itself but an union of all the following nodes
+    (not counting the nodes idented deeper)
+
+  #program: [#statement]
+
+  #statement:
+    local:  names=[STR] values=[#expr]
+    localfunc: name=STR      body=function
+    fucstat:   lhs=var|field body=function method=BOOL
+    numfor: name=STR    body=[#statement] init=#expr limit=#expr step=#expr?
+    genfor: names=[STR] body=[#statement] values=[#expr]
+    if: clauses=[clause] els=[#statement]?
+      clause: cond=#expr body=[#statement]
+    repeat: cond=#expr body=[#statement]
+    while:  cond=#expr body=[#statement]
+    do:     body=[#statement]
+    label:  name=STR
+    goto:   name=STR
+    return: values=[#expr]
+    break:
+    assignment: lhs=[var|field|index] values=[#expr]
+    (call)
+
+  #expr:
+    unop:  op=STR value=#expr
+    binop: op=STR left=#expr right=#expr
+    const: value=STR (true false nil)
+    str:   value=STR
+    num:   value=STR
+    var:   name=STR
+    varargs: (empty)
+    field: base=#expr key=STR
+    index: base=#expr key=#expr
+    call:  base=#expr values=[#expr] key=STR? (for methods)
+    function: names=[STR] vararg=BOOL body=[#statement]
+    constructor: items=[indexitem|fielditem|item]
+      indexitem: key=#expr value=#expr
+      fielditem: key=STR   value=#expr
+      item:      value=#expr
+
+  TODO: Test that the parser is correctly emiting this structure
+
+  TODO: Refactor. Try to make it smaller and easier to read.
+
+--]]
+
 -- Lua magic to not pollute the global namespace
 _ENV = setmetatable({}, {__index = _ENV})
 
@@ -25,13 +87,7 @@ function err (msg)
   error(Parser.error)
 end
 
-function grave (msg)
-  msg = "\x1b[1;31m[| " .. msg .. " |]\x1b[0;39m"
-  err(msg)
-end
-
 function next ()
-  if token == nil then return nil end
   local old = token
   token = _lookahead or Lexer.next()
   _lookahead = nil
@@ -46,7 +102,7 @@ function next ()
 end
 
 function check (...)
-  if token == nil then return false end
+  if not token then return false end
   local types = table.pack(...)
   for i, tp in pairs(types) do
     if token.type == tp
@@ -119,7 +175,7 @@ function Parser.primaryexp ()
   elseif check("NAME") then
     return Parser.singlevar()
   end
-  err("unexpected symbol") -- TODO: Not very helpful
+  err("unexpected symbol") -- TODO: Not a very helpful error message
 end
 
 function constructor ()
@@ -144,6 +200,8 @@ function constructor ()
       local exp = Parser.expr()
       table.insert(fields, { type="value", value=exp })
     end
+
+    try(",", ";") -- Skip separators
   end
   match("}", tk)
 
@@ -471,10 +529,15 @@ function Parser.statement ()
 
       local explist = Parser.explist()
 
+      -- TODO: Reject non field/var assignments
       return {type = "assignment", vars = vars, explist = explist}
     end
   end
 end
+
+--------------------------------------------------------------------------------
+----                               Interface                                ----
+--------------------------------------------------------------------------------
 
 function Parser.statlist ()
   local statlist = {}
@@ -501,6 +564,8 @@ function Parser.program ()
   status, prog = xpcall(parse_program, function (msg)
     if Parser.error == nil then
       trace = debug.traceback(msg, 2)
+    else
+      Parser.trace = debug.traceback(msg, 4)
     end
   end)
 
