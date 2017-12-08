@@ -34,7 +34,7 @@
     label:  name=STR
     goto:   name=STR
     return: values=[#expr]
-    break:
+    break:  (empty)
     assignment: lhs=[var|field|index] values=[#expr]
     (call)
 
@@ -273,9 +273,9 @@ priority = {
   ["-"]={10, 10},
   ["*"]={11, 11},
   ["%"]={11, 11},
-  ["^"]={14, 13}, -- right associative
   ["/"]={11, 11},
   ["//"]={11, 11},
+  ["^"]={14, 13}, -- right associative
   ["&"]={6, 6},
   ["|"]={4, 4},
   ["~"]={5, 5},
@@ -557,7 +557,7 @@ function parse_program ()
   return statlist
 end
 
-function Parser.program ()
+function Parser.parse ()
 
   local trace
 

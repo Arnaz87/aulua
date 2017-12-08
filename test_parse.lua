@@ -1,8 +1,6 @@
 
 local Parser = require("parser")
 
-local loud = false
-local showtrace = false
 
 local function tostr (obj)
   if type(obj) ~= "table" then
@@ -62,6 +60,14 @@ local function PASS (line, msg)
   print("\x1b[1;32m[PASS]\x1b[0;39m", line, "\x1b[1;30m" .. msg .. "\x1b[0;39m")
 end
 
+
+
+
+
+
+local loud = false
+local showtrace = false
+
 for line in io.lines("test_parse.txt") do
   if line:find("LOUD") ~= nil then loud = true end
   if line:find("QUIT") ~= nil then break end
@@ -69,7 +75,7 @@ for line in io.lines("test_parse.txt") do
   local fail = line:find("FAIL") ~= nil
 
   Parser.open(line)
-  local parsed = Parser.program()
+  local parsed = Parser.parse()
 
   if fail then
     if parsed then
@@ -87,21 +93,273 @@ for line in io.lines("test_parse.txt") do
   end
 end
 
---[[
-local function test (meth, str, expected)
+
+
+
+
+
+loud = true
+
+local function test (str, expected)
   Parser.open(str)
-  local node = Parser[meth]()
+  local node = Parser.parse()
   if eq(node, expected) then
-    print("CORRECT", str)
+    if loud then
+      PASS(str, tostr(node))
+    end
   else
-    print("FAIL", str)
-    if Parser.error then print("\t" .. Parser.error)
-    else print("\tGOT", tostr(node)) end
+    local msg = "Incorrect AST"
+    if Parser.error then msg = Parser.error end
+    FAIL(str, msg)
+    if not Parser.error then
+      print("\t[NEED]", tostr(expected))
+      print("\t[GOT]", tostr(node))
+    end
   end
 end
 
-test("expr", "45", {type="num", value="45"})
-test("expr", "nil", {type="nil"})
-]]
+test("local a,b,c=1,a,'foo',true,false,nil", {
+  {type="local", names={"a", "b", "c"}, values={
+    {type="num", value="1"},
+    {type="var", name="a"},
+    {type="str", value="foo"},
+    {type="const", value="true"},
+    {type="const", value="false"},
+    {type="const", value="nil"},
+  }}
+})
+
+test("do local a, b end", {
+  {type="do", body={
+    {type="local", names={"a", "b"}, values={}}
+  }}
+})
+
+test("do do end end", {
+  {type="do", body={
+    {type="do", body={}}
+  }}
+})
+
+test("while a>b do break end", {
+  {type="while", cond={
+    type="binop",
+    op=">",
+    left={type="var", name="a"},
+    right={type="var", name="b"}
+  }, body={type="break"}}
+})
+
+
+test("repeat return until 0", {
+  {type="repeat",
+    cond={type="num", value="0"},
+    body={ {type="return", values={}} }
+  }
+})
+
+test("::a:: goto a return", {
+  {type="label", name="a"},
+  {type="goto", name="a"},
+  {type="return", values={}}
+})
+
+test("if true then local a elseif 2 then local b end", {
+  {type="if",
+    clauses={
+      {type="clause", cond={type="const", value="true"}, body={
+        {type="local", names={"a"}}
+      }},
+      {type="clause", cond={type="num", value="2"}, body={
+        {type="local", names={"b"}}
+      }}
+    },
+    els={}
+  }
+})
+
+test("if 1 then elseif 2 then else local a end", {
+  {type="if",
+    clauses={
+      {type="clause", cond={type="num", value="1"}, body={}},
+      {type="clause", cond={type="num", value="2"}, body={}}
+    },
+    els={
+      {type="local", names={"a"}}
+    }
+  }
+})
+
+test("for a = 1, 2, 3 do end", {{type="numfor", name="a",
+  init={type="num", value="1"},
+  limit={type="num", value="2"},
+  step={type="num", value="3"},
+  body={},
+}})
+
+test("for a in b do break end", {{
+  type="genfor", names={"a"},
+  values={ {type="var", name="a"} },
+  body={ {type="break"} }
+}})
+
+
+test("local function a(p) end", {{
+  type="localfunc", name="a", body={
+    type="function", names={"b"}, varargs=false, body={}
+  }
+}})
+
+test("function a() end", {{
+  type="funcstat", lhs={type="var", name="a"}, body={
+    type="function", names={}, varargs=false, body={}
+  }
+}})
+
+test("function a.b:c() end", {{
+  type="funcstat", method=true, lhs={
+    type="fieldsel", key="c", base={
+      type="fieldsel", key="b", base={
+        type="var", name="a"
+      }
+    }
+  }, body={type="function", names={}, varargs=false, body={}}
+}})
+
+test("a, b.c, d[0] = 1,2,...", {{
+  type="assignment", lhs={
+    {type="var", name="a"},
+    {type="fieldsel", key="c",
+      base={type="var", name="b"}
+    },
+    {type="index",
+      key={type="num", value="0"},
+      base={type="var", name="d"}
+    },
+  }, values={
+    {type="num", value="1"},
+    {type="num", value="2"},
+    {type="varargs"},
+  }
+}})
+
+test("b.c[d]:e(3,...)", {
+  {type="call", key="e",
+    values={{type="num", value="3"}, {type="varargs"}},
+    base={type="index", key={type="var", name="d"},
+      base={type="fieldsel", name="c",
+        base={type="var", name="b"}
+      }
+    }
+  }
+})
+
+test("a{}'foo'", {
+  { type="call",
+    values={{type="str", value="foo"}},
+    base={type="call",
+      values={{type="constructor"}, items={}},
+      base={type="var", name="a"}
+    }
+  }
+})
+
+test("(a+b):c()", {
+  { type="call", key="c",
+    values={},
+    base={type="binop", op="+",
+      left={type="var", name="a"},
+      right={type="var", name="b"}
+    }
+  }
+})
+
+test("f(function(a,b,c,...) return c,b,a,... end)", {
+  {type="call", base={type="var", name="f"}, values={
+    {type="function", names={"a", "b", "c"}, varargs=true, body={
+      {type="return", values={
+        {type="var", name="c"},
+        {type="var", name="b"},
+        {type="var", name="a"},
+        {type="varargs"},
+      }}
+    }}
+  }}
+})
+
+
+test("f(function(a,b,c,...) return c,b,a,... end)", {
+  {type="call", base={type="var", name="f"}, values={
+    {type="function", names={"a", "b", "c"}, varargs=true, body={
+      {type="return", values={
+        {type="var", name="c"},
+        {type="var", name="b"},
+        {type="var", name="a"},
+        {type="varargs"},
+      }}
+    }}
+  }}
+})
+
+-- WTF!
+test("a = 1 + 2 - 3 * 4 / 5 % 6 ^ 7", {
+  {type="assignment", lhs={{type="var", name="a"}}, 
+    values={type="binop", op="-",
+      left={type="binop", op="+",
+        left={type="num", value="1"},
+        right={type="num", value="2"}},
+      right={type="binop", op="%",
+        left={type="binop", op="/",
+          left={type="binop", op="*",
+            left={type="num", value="3"},
+            right={type="num", value="4"}},
+          right={type="num", value="5"}},
+        right={type="binop", op="^",
+          left={type="num", value="6"},
+          right={type="num", value="7"}},
+      }
+    }
+  }
+})
+
+test("local a = function() end == function() end", {
+  {type="local", names={"a"}, 
+    values={type="binop", op="==",
+      left={type="function", names={}, varargs=false, body={}},
+      right={type="function", names={}, varargs=false, body={}}
+    }
+  }
+})
+
+test("local a = {{},{},{{}},}", {
+  {type="local", names={"a"}, 
+    values={type="constructor", items={
+      {type="item", value={type="constructor", items={}}},
+      {type="item", value={type="constructor", items={}}},
+      {type="item",
+        value={type="constructor", items={
+          {type="item", value={type="constructor", items={}}}
+        }}
+      },
+    }}
+  }
+})
+test("local a = { a or b, c=1; ['foo']='bar', }", {
+  {type="local", names={"a"}, 
+    values={type="constructor", items={
+      {type="item", value={
+        type="binop", op="or",
+          left={type="var", name="a"},
+          right={type="var", name="b"}
+        }
+      },
+      {type="fielditem", key="c", value={type="num", value="1"}},
+      {type="indexitem",
+        key={type="str", value="foo"},
+        value={type="str", value="bar"}
+      },
+    }}
+  }
+})
 
 return Parser, test
