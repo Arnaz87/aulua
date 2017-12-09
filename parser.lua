@@ -45,7 +45,7 @@
     str:   value=STR
     num:   value=STR
     var:   name=STR
-    varargs: (empty)
+    vararg: (empty)
     field: base=#expr key=STR
     index: base=#expr key=#expr
     call:  base=#expr values=[#expr] key=STR? (for methods)
@@ -55,10 +55,8 @@
       fielditem: key=STR   value=#expr
       item:      value=#expr
 
-  TODO: Test that the parser is correctly emiting this structure
-
   TODO: Refactor. Try to make it smaller and easier to read.
-
+  TODO: Emit the source position
 --]]
 
 -- Lua magic to not pollute the global namespace
@@ -163,24 +161,9 @@ function Parser.singlevar ()
   return { type="var", name=nm }
 end
 
-function Parser.primaryexp ()
-  if check("(") then
-    local tk = expect("(")
-
-    local expr = Parser.expr()
-    assert(expr)
-
-    match(")", tk)
-    return expr
-  elseif check("NAME") then
-    return Parser.singlevar()
-  end
-  err("unexpected symbol") -- TODO: Not a very helpful error message
-end
-
 function constructor ()
   local tk = expect("{")
-  local fields = {}
+  local items = {}
 
   while check_not("}") do
     if try("[") then
@@ -188,28 +171,33 @@ function constructor ()
       expect("]")
       expect("=")
       local value = Parser.expr()
-      table.insert(fields, { type="key", key=key, value=value })
+      table.insert(items, { type="indexitem", key=key, value=value })
 
     elseif check("NAME") and lookahead() and lookahead().type == "=" then
       local name = get_name()
       expect("=")
       local value = Parser.expr()
-      table.insert(fields, { type="namekey", name=name, value=value })
+      table.insert(items, { type="fielditem", key=name, value=value })
 
     else
       local exp = Parser.expr()
-      table.insert(fields, { type="value", value=exp })
+      table.insert(items, { type="item", value=exp })
     end
 
     try(",", ";") -- Skip separators
   end
   match("}", tk)
 
-  return { type = "constructor", fields=fields }
+  return { type = "constructor", items=items }
 end
 
 function funcargs (exp, method)
   local args = {}
+
+  local key
+  if try(":") then
+    key = get_name()
+  end
 
   if check("STR") then
     args = { Parser.simpleexp() }
@@ -223,28 +211,39 @@ function funcargs (exp, method)
     match(")", tk)
   end
 
-  return {type="call", expr=exp, args=args}
+  return {type="call", base=exp, values=args, key=key}
 end
 
-function Parser.suffixedexp ()
-  local exp = Parser.primaryexp()
+function Parser.suffixedexp (msgerr)
+
+  ------------------------- Primary expression
+  local exp, parens = nil, false
+  if check("(") then
+    local tk = expect("(")
+    exp = Parser.expr()
+    match(")", tk)
+    parens = true
+  elseif check("NAME") then
+    exp = Parser.singlevar()
+  else err(msgerr or "syntax error") end
+
+  ------------------------- Suffixes
   while true do
     if check(".") then
       exp = fieldsel(exp)
+      parens = false
 
     elseif try("[") then
       local index = Parser.expr()
       expect("]")
-      exp = {type="index", expr=exp, index=index}
+      exp = {type="index", base=exp, key=index}
+      parens = false
 
-    elseif check(":") then
-      exp = fieldsel(exp, true)
-      exp = funcargs(exp, true)
-
-    elseif check("(", "{", "STR") then
+    elseif check(":", "(", "{", "STR") then
       exp = funcargs(exp)
+      parens = false
 
-    else return exp end
+    else return exp, parens end
   end
 end
 
@@ -252,9 +251,9 @@ function Parser.simpleexp ()
   if check("NUM") then
     return { type = "num", value = next().value }
   elseif check("true", "false", "nil") then
-    return { type = next().type }
+    return { type = "const", value = next().type }
   elseif try("...") then
-    return { type = "varargs" }
+    return { type = "vararg" }
   elseif check("STR") then
     return { type="str", value = next().value }
   elseif check("{") then
@@ -263,7 +262,7 @@ function Parser.simpleexp ()
     local kw = next()
     return Parser.funcbody(kw)
   else
-    return Parser.suffixedexp()
+    return Parser.suffixedexp("invalid expression")
   end
 end
 
@@ -312,9 +311,7 @@ function Parser.expr (limit)
     left = {type = "binop", op=op, left=left, right=right}
     prio = token and priority[token.type]
   end
-
-  if left then return left
-  else err("Invalid Expression") end
+  return left
 end
 
 function Parser.explist ()
@@ -346,20 +343,50 @@ function Parser.funcbody (kw)
 
   local body = Parser.statlist()
   match("end", kw)
-  return {type = "function", vararg = vararg, args = names, body = body}
+  return {type = "function", vararg = vararg, names = names, body = body}
 end
 
-function fieldsel (value, method)
+function fieldsel (base, method)
   if method then expect(":")
   else expect(".") end
 
   local name = get_name()
-  return {type="fieldsel", val=value, name=name}
+  return {type="field", base=base, key=name}
 end
 
 --------------------------------------------------------------------------------
 ----                               Statements                               ----
 --------------------------------------------------------------------------------
+
+-- Statements that start with an expression: assignment and calls
+function Parser.exprstat ()
+  local expr, parens = Parser.suffixedexp("invalid statement")
+
+  if not parens and expr.type == "call" then return expr
+  else
+    local lhs = {expr}
+    while try(",") do
+      local _paren
+      expr, _paren = Parser.suffixedexp("invalid statement")
+      if _paren then parens = true end
+      table.insert(lhs, expr)
+    end
+
+    expect("=")
+
+    if parens then err("assignment to a parenthesized expression") end
+    for i, exp in pairs(lhs) do
+      if  exp.type ~= "var"
+      and exp.type ~= "field"
+      and exp.type ~= "index"
+      then err("assignment to a non lvalue expression")
+      end
+    end
+
+    local values = Parser.explist()
+    return {type = "assignment", lhs = lhs, values = values}
+  end
+end
 
 function Parser.forstat ()
   local kw = expect("for")
@@ -392,11 +419,11 @@ function Parser.forstat ()
       table.insert(names, tk.value)
     end
     expect("in")
-    local explist = Parser.explist()
+    local values = Parser.explist()
     expect("do")
     local body = Parser.statlist()
     match("end", kw)
-    return  {type="genfor", vars=names, explist=explist, body=body}
+    return  {type="genfor", names=names, values=values, body=body}
   else expect("=", ",", "in") end
 end
 
@@ -420,7 +447,7 @@ function Parser.ifstat ()
     })
   end
 
-  local els
+  local els= {}
   if try("else") then
     els = Parser.statlist()
   end
@@ -463,18 +490,18 @@ function Parser.statement ()
   elseif check("function") then
     local kw = expect("function")
 
-    local name , method = Parser.singlevar()
+    local lhs , method = Parser.singlevar(), false
     while check(".") do
-      name = fieldsel(name)
+      lhs = fieldsel(lhs)
     end
     if check(":") then
-      name = fieldsel(name, true)
+      lhs = fieldsel(lhs, true)
       method = true
     end
     
     local body = Parser.funcbody(kw)
 
-    return { type = "funcstat", name = name, body = body, method = method }
+    return { type = "funcstat", lhs = lhs, body = body, method = method }
 
   elseif try("local") then
     if check("function") then
@@ -488,12 +515,12 @@ function Parser.statement ()
       repeat table.insert(names, get_name())
       until not try(",")
 
-      local explist = nil
+      local values = {}
       if try("=") then
-        explist = Parser.explist()
+        values = Parser.explist()
       end
 
-      return { type = "local", names=names, explist=explist }
+      return { type = "local", names=names, values=values }
     end
 
   elseif try("::") then
@@ -502,42 +529,25 @@ function Parser.statement ()
     return {type = "label", name = name}
 
   elseif try("return") then
-    local list
+    local list = {}
     if check_not(";", "end", "else", "elseif", "until") then
       list = Parser.explist()
     end
     try(";") -- Optional ;
-    return { type = "return", arguments = list }
+    return { type = "return", values = list }
 
   elseif try("break") then
     return { type = "break" }
 
   elseif try("goto") then
     local name = get_name()
-    return { type = "goto", label = name}
+    return { type = "goto", name = name}
 
   else
-    local expr = Parser.suffixedexp()
-    if expr.type == "call" then return expr
-    else -- If it's not a call, it can be a var, index, fieldsel or parenthesis
-      local vars = {expr}
-      while try(",") do
-        expr = Parser.suffixedexp()
-        table.insert(vars, expr)
-      end
-      expect("=")
+    return Parser.exprstat()
 
-      local explist = Parser.explist()
-
-      -- TODO: Reject non field/var assignments
-      return {type = "assignment", vars = vars, explist = explist}
-    end
   end
 end
-
---------------------------------------------------------------------------------
-----                               Interface                                ----
---------------------------------------------------------------------------------
 
 function Parser.statlist ()
   local statlist = {}
@@ -550,6 +560,10 @@ function Parser.statlist ()
   end
   return statlist
 end
+
+--------------------------------------------------------------------------------
+----                               Interface                                ----
+--------------------------------------------------------------------------------
 
 function parse_program ()
   local statlist = Parser.statlist()

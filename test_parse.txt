@@ -282,6 +282,7 @@
   function a(p) do end end
   function a.(                            -- FAIL
   function a.1                            -- FAIL
+  function a.() end                       -- FAIL
   function a.b() end
   function a.b,                           -- FAIL
   function a.b.(                          -- FAIL
@@ -290,6 +291,7 @@
   function a:1                            -- FAIL
   function a:b() end
   function a:b:                           -- FAIL
+  function a:b:() end                     -- FAIL
   function a:b.                           -- FAIL
   function a.b.c:d() end
   function a(...) end
@@ -314,6 +316,7 @@
   a, = 1                                  -- FAIL
   a,b,c = 1
   a,b,c = 1,2,3
+  a. = 1                                  -- FAIL
   a.b = 1
   a.b.c = 1
   a[b] = 1
@@ -329,7 +332,9 @@
   true = 1                                -- FAIL
   (a) = 1                                 -- FAIL
   (a.b[1]) = 1                            -- FAIL
+  ("foo") = 1                             -- FAIL
   {} = 1                                  -- FAIL
+  a:b = 1                                 -- FAIL
   a:b() = 1                               -- FAIL
   a() = 1                                 -- FAIL
   a.b:c() = 1                             -- FAIL
@@ -367,6 +372,7 @@
   a:b():c()
   a:b().c[d]:e()
   a:b()[c].d:e()
+  (a())                                   -- FAIL
   (a)()
   ()()                                    -- FAIL
   (1)()
