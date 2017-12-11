@@ -72,7 +72,7 @@ local KEYWORDS = [[
   | local nil not or repeat return then true until while |
 ]]
 
--- Estos operadores tienen que ir en este orden:
+-- These operators have to respect the order:
 -- // /
 -- ... .. .
 -- << <= <
@@ -164,7 +164,7 @@ function lex ()
       elseif eof or check("[\n\r]") then
         err("unfinished string")
 
-      ----------------------------------------------  Escape secuences
+      ----------------------------------------------  Escape sequences
       elseif match("\\") then
 
         local tbl = { a="\a", b="\b", f="\f", n="\n", r="\r", t="\t", v="\v" }

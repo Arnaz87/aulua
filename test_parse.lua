@@ -370,4 +370,60 @@ test("local a = { a or b, c=1; ['foo']='bar', }", {
   }
 })
 
+-- Example in the readme
+test([[
+function add (a, b)
+  local r = a+b
+  print(r)
+  return r
+end
+
+add(1+2, 3)
+]], {
+  {
+    type="funcstat", method=false,
+    lhs={type="var", name="add"},
+    body={
+      type="function", vararg=false,
+      names={"a", "b"},
+      body={
+        {
+          type="local",
+          names={"r"},
+          values={
+            {
+              type="binop", op="+",
+              left={type="var", name="a"},
+              right={type="var", name="b"}
+            }
+          }
+        }, {
+          type="call",
+          base={type="var", name="print"},
+          values={
+            {type="var", name="r"}
+          }
+        }, {
+          type="return",
+          values={
+            {type="var", name="r"}
+          }
+        }
+      }
+    }
+  }, {
+    type="call",
+    base={type="var", name="add"},
+    values={
+      {
+        type="binop", op="+",
+        left={type="num", value="1"},
+        right={type="num", value="2"}
+      }, {
+        type="num", value="3"
+      }
+    }
+  }
+})
+
 return Parser, test

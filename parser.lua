@@ -1,64 +1,4 @@
 
---[[
-  My main references for this were, in order:
-  - The C lua source code
-    https://www.lua.org/source/5.3/lparser.c.html
-  - LuaMinify
-    https://github.com/stravant/LuaMinify/blob/master/ParseLua.lua
-  - To a lesser extent, this javascript parser
-    https://github.com/oxyc/luaparse/blob/master/luaparse.js
-
-  AST Structure
-  - STR: A pure string
-  - BOOL: A pure boolean
-  - node: An instance of the indicated node
-  - type?: A value of a type or nothing at all
-  - [type]: A sequence of zero or more values of a type
-  - node|node: An instance of any of the nodes (only nodes)
-  - #category: not a node itself but an union of all the following nodes
-    (not counting the nodes idented deeper)
-
-  #program: [#statement]
-
-  #statement:
-    local:  names=[STR] values=[#expr]
-    localfunc: name=STR      body=function
-    fucstat:   lhs=var|field body=function method=BOOL
-    numfor: name=STR    body=[#statement] init=#expr limit=#expr step=#expr?
-    genfor: names=[STR] body=[#statement] values=[#expr]
-    if: clauses=[clause] els=[#statement]?
-      clause: cond=#expr body=[#statement]
-    repeat: cond=#expr body=[#statement]
-    while:  cond=#expr body=[#statement]
-    do:     body=[#statement]
-    label:  name=STR
-    goto:   name=STR
-    return: values=[#expr]
-    break:  (empty)
-    assignment: lhs=[var|field|index] values=[#expr]
-    (call)
-
-  #expr:
-    unop:  op=STR value=#expr
-    binop: op=STR left=#expr right=#expr
-    const: value=STR (true false nil)
-    str:   value=STR
-    num:   value=STR
-    var:   name=STR
-    vararg: (empty)
-    field: base=#expr key=STR
-    index: base=#expr key=#expr
-    call:  base=#expr values=[#expr] key=STR? (for methods)
-    function: names=[STR] vararg=BOOL body=[#statement]
-    constructor: items=[indexitem|fielditem|item]
-      indexitem: key=#expr value=#expr
-      fielditem: key=STR   value=#expr
-      item:      value=#expr
-
-  TODO: Refactor. Try to make it smaller and easier to read.
-  TODO: Emit the source position
---]]
-
 -- Lua magic to not pollute the global namespace
 _ENV = setmetatable({}, {__index = _ENV})
 
@@ -584,7 +524,6 @@ function Parser.parse ()
   end)
 
   if trace then
-    --print("\x1b[31mInternal Parser Error\x1b[39m")
     print(trace)
     os.exit(1)
   end

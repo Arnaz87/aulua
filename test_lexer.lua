@@ -207,17 +207,17 @@ end
   KW("end")
 )
 
--- Quick sketch to test token positions
+-- Quick test to test token positions (This is actually valid lua)
 Lexer.open([=[
 
 do
 x = "\n" .. "\
 x" -- XD
-  f --[[
+  print --[[
   long comment
 ]] [[long
 str]]
-    break
+    return
 end
 ]=])
 
@@ -238,13 +238,13 @@ end
 
 -- The positions of each of the tokens in the currently open Lexer
 -- The contents of the content don't matter, as they were tested already
-pos(2, 1)
-pos(3, 1)
-pos(3, 3)
-pos(3, 5)
-pos(3, 10)
-pos(3, 13)
-pos(5, 3)
-pos(7, 4)
-pos(9, 5)
-pos(10, 1)
+pos(2, 1) -- do
+pos(3, 1) -- x
+pos(3, 3) -- =
+pos(3, 5) -- "\n"
+pos(3, 10) -- ..
+pos(3, 13) -- "x"
+pos(5, 3) -- print
+pos(7, 4) -- [[long str]]
+pos(9, 5) -- return
+pos(10, 1) -- end
