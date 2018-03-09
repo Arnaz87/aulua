@@ -8,8 +8,6 @@ Intended to be small and simple. My main references for this code were:
 - [Yueliang](http://yueliang.luaforge.net/)
 - [LuaMinify](https://github.com/stravant/LuaMinify)
 
-*TODO: Emit the source position in the Parser*
-
 **Lisence**: This is free software, published under the
   [WTFPL](http://www.wtfpl.net/)
 
@@ -94,48 +92,48 @@ Output AST:
 ~~~ lua
 {
   {
-    type="funcstat", method=false,
-    lhs={type="var", name="add"},
+    type="funcstat", method=false, line=1, column=1,
+    lhs={type="var", name="add", line=1, column=10},
     body={
       type="function", vararg=false,
       names={"a", "b"},
       body={
         {
-          type="local",
+          type="local", line=2, column=3,
           names={"r"},
           values={
             {
-              type="binop", op="+",
-              left={type="var", name="a"},
-              right={type="var", name="b"}
+              type="binop", op="+", line=2, column=14,
+              left={type="var", name="a", line=2, column=13},
+              right={type="var", name="b", line=2, column=15}
             }
           }
         }, {
-          type="call",
-          base={type="var", name="print"},
+          type="call", line=3, column=3,
+          base={type="var", name="print", line=3, column=3},
           values={
-            {type="var", name="r"}
+            {type="var", name="r", line=3, column=9}
           }
         }, {
-          type="return",
+          type="return", line=4, column=3,
           values={
-            {type="var", name="r"}
+            {type="var", name="r", line=4, column=10}
           }
         }
       }
     }
   }, {
-    type="call",
-    base={type="var", name="add"},
+    type="call", line=7, column=1,
+    base={type="var", name="add", line=7, column=1},
     values={
       {
-        type="binop", op="+",
-        left={type="num", value="1"},
-        right={type="num", value="2"}
+        type="binop", op="+", line=7, column=6,
+        left={type="num", value="1", line=7, column=5},
+        right={type="num", value="2", line=7, column=7}
       }, {
-        type="num", value="3"
+        type="num", value="3", line=7, column=10
       }
     }
   }
-}
+})
 ~~~

@@ -122,59 +122,62 @@ end
 
 
 test("local a,b,c=1,a,'foo',true,false,nil", {
-  {type="local", names={"a", "b", "c"}, values={
-    {type="num", value="1"},
-    {type="var", name="a"},
-    {type="str", value="foo"},
-    {type="const", value="true"},
-    {type="const", value="false"},
-    {type="const", value="nil"},
+  {type="local", names={"a", "b", "c"}, line=1, column=1, values={
+    {type="num", value="1", line=1, column=13},
+    {type="var", name="a", line=1, column=15},
+    {type="str", value="foo", line=1, column=17},
+    {type="const", value="true", line=1, column=23},
+    {type="const", value="false", line=1, column=28},
+    {type="const", value="nil", line=1, column=34},
   }}
 })
 
 test("do local a, b end", {
-  {type="do", body={
-    {type="local", names={"a", "b"}, values={}}
+  {type="do", line=1, column=1, body={
+    {type="local", line=1, column=4, names={"a", "b"}, values={}}
   }}
 })
 
 test("do do end end", {
-  {type="do", body={
-    {type="do", body={}}
+  {type="do", line=1, column=1, body={
+    {type="do", line=1, column=4, body={}}
   }}
 })
 
 test("while a>b do break end", {
-  {type="while", cond={
-    type="binop",
-    op=">",
-    left={type="var", name="a"},
-    right={type="var", name="b"}
-  }, body={ {type="break"} }}
+  {type="while", line=1, column=1, cond={
+    type="binop", line=1, column=8, op=">",
+    left={type="var", name="a", line=1, column=7},
+    right={type="var", name="b", line=1, column=9}
+  }, body={ {type="break", line=1, column=14} }}
 })
 
 
 test("repeat return until 0", {
-  {type="repeat",
-    cond={type="num", value="0"},
-    body={ {type="return", values={}} }
+  {type="repeat", line=1, column=1,
+    cond={type="num", value="0", line=1, column=21},
+    body={ {type="return", line=1, column=8, values={}} }
   }
 })
 
 test("::a:: goto a return", {
-  {type="label", name="a"},
-  {type="goto", name="a"},
-  {type="return", values={}}
+  {type="label", name="a", line=1, column=1},
+  {type="goto", name="a", line=1, column=7},
+  {type="return", values={}, line=1, column=14}
 })
 
 test("if true then local a elseif 2 then local b end", {
-  {type="if",
+  {type="if", line=1, column=1,
     clauses={
-      {type="clause", cond={type="const", value="true"}, body={
-        {type="local", names={"a"}, values={}}
-      }},
-      {type="clause", cond={type="num", value="2"}, body={
-        {type="local", names={"b"}, values={}}
+      {
+        type="clause", cond={
+          type="const", value="true", line=1, column=4
+        }, body={
+          {type="local", names={"a"}, values={}, line=1, column=14}
+        }
+      },
+      {type="clause", cond={type="num", value="2", line=1, column=29}, body={
+        {type="local", names={"b"}, values={}, line=1, column=36}
       }}
     },
     els={}
@@ -182,167 +185,163 @@ test("if true then local a elseif 2 then local b end", {
 })
 
 test("if 1 then elseif 2 then else local a end", {
-  {type="if",
+  {type="if", line=1, column=1,
     clauses={
-      {type="clause", cond={type="num", value="1"}, body={}},
-      {type="clause", cond={type="num", value="2"}, body={}}
+      {type="clause", cond={type="num", value="1", line=1, column=4}, body={}},
+      {type="clause", cond={type="num", value="2", line=1, column=18}, body={}}
     },
     els={
-      {type="local", names={"a"}, values={}}
+      {type="local", names={"a"}, values={}, line=1, column=30}
     }
   }
 })
 
-test("for a = 1, 2, 3 do end", {{type="numfor", name="a",
-  init={type="num", value="1"},
-  limit={type="num", value="2"},
-  step={type="num", value="3"},
+test("for a = 1, 2, 3 do end", {{type="numfor", name="a", line=1, column=1,
+  init={type="num", value="1", line=1, column=9},
+  limit={type="num", value="2", line=1, column=12},
+  step={type="num", value="3", line=1, column=15},
   body={},
 }})
 
 test("for a in b do break end", {{
-  type="genfor", names={"a"},
-  values={ {type="var", name="b"} },
-  body={ {type="break"} }
+  type="genfor", names={"a"}, line=1, column=1,
+  values={ {type="var", name="b", line=1, column=10} },
+  body={ {type="break", line=1, column=15} }
 }})
 
 
 test("local function a(p) end", {{
-  type="localfunc", name="a", body={
+  type="localfunc", name="a", line=1, column=1, body={
     type="function", names={"p"}, vararg=false, body={}
   }
 }})
 
 test("function a() end", {{
-  type="funcstat", lhs={type="var", name="a"}, method=false, body={
+  type="funcstat", method=false, line=1, column=1,
+  lhs={type="var", name="a", line=1, column=10}, body={
     type="function", names={}, vararg=false, body={}
   }
 }})
 
 test("function a.b:c() end", {{
-  type="funcstat", method=true, lhs={
-    type="field", key="c", base={
-      type="field", key="b", base={
-        type="var", name="a"
+  type="funcstat", method=true, line=1, column=1, lhs={
+    type="field", key="c", line=1, column=14, base={
+      type="field", key="b", line=1, column=12, base={
+        type="var", name="a", line=1, column=10
       }
     }
   }, body={type="function", names={}, vararg=false, body={}}
 }})
 
 test("a, b.c, d[0] = 1,2,...", {{
-  type="assignment", lhs={
-    {type="var", name="a"},
-    {type="field", key="c",
-      base={type="var", name="b"}
+  type="assignment", line=1, column=1, lhs={
+    {type="var", name="a", line=1, column=1},
+    {type="field", key="c", line=1, column=6,
+      base={type="var", name="b", line=1, column=4}
     },
-    {type="index",
-      key={type="num", value="0"},
-      base={type="var", name="d"}
+    {type="index", line=1, column=11,
+      key={type="num", value="0", line=1, column=11},
+      base={type="var", name="d", line=1, column=9}
     },
   }, values={
-    {type="num", value="1"},
-    {type="num", value="2"},
-    {type="vararg"},
+    {type="num", value="1", line=1, column=16},
+    {type="num", value="2", line=1, column=18},
+    {type="vararg", line=1, column=20},
   }
 }})
 
 test("b.c[d]:e(3,...)", {
-  {type="call", key="e",
-    values={{type="num", value="3"}, {type="vararg"}},
-    base={type="index", key={type="var", name="d"},
-      base={type="field", key="c",
-        base={type="var", name="b"}
+  {type="call", key="e", line=1, column=8,
+    values={
+      {type="num", value="3", line=1, column=10},
+      {type="vararg", line=1, column=12}
+    },
+    base={type="index", line=1, column=5,
+      key={type="var", name="d", line=1, column=5},
+      base={type="field", key="c", line=1, column=3,
+        base={type="var", name="b", line=1, column=1}
       }
     }
   }
 })
 
 test("a{}'foo'", {
-  { type="call",
-    values={{type="str", value="foo"}},
-    base={type="call",
-      values={ {type="constructor", items={}} },
-      base={type="var", name="a"}
+  { type="call", line=1, column=1,
+    values={{type="str", value="foo", line=1, column=4}},
+    base={type="call", line=1, column=1,
+      values={ {type="constructor", items={}, line=1, column=2} },
+      base={type="var", name="a", line=1, column=1}
     }
   }
 })
 
 test("(a+b):c()", {
-  { type="call", key="c",
+  { type="call", key="c", line=1, column=7,
     values={},
-    base={type="binop", op="+",
-      left={type="var", name="a"},
-      right={type="var", name="b"}
+    base={type="binop", op="+", line=1, column=3,
+      left={type="var", name="a", line=1, column=2},
+      right={type="var", name="b", line=1, column=4}
     }
   }
 })
 
 test("f(function(a,b,c,...) return c,b,a,... end)", {
-  {type="call", base={type="var", name="f"}, values={
-    {type="function", names={"a", "b", "c"}, vararg=true, body={
-      {type="return", values={
-        {type="var", name="c"},
-        {type="var", name="b"},
-        {type="var", name="a"},
-        {type="vararg"},
-      }}
-    }}
-  }}
-})
-
-
-test("f(function(a,b,c,...) return c,b,a,... end)", {
-  {type="call", base={type="var", name="f"}, values={
-    {type="function", names={"a", "b", "c"}, vararg=true, body={
-      {type="return", values={
-        {type="var", name="c"},
-        {type="var", name="b"},
-        {type="var", name="a"},
-        {type="vararg"},
-      }}
-    }}
+  {type="call", base={type="var", name="f", line=1, column=1}, line=1, column=1, values={
+    {
+      type="function", names={"a", "b", "c"},
+      vararg=true, line=1, column=3,
+      body={
+        {type="return", line=1, column=23, values={
+          {type="var", name="c", line=1, column=30},
+          {type="var", name="b", line=1, column=32},
+          {type="var", name="a", line=1, column=34},
+          {type="vararg", line=1, column=36},
+        }}
+      }
+    }
   }}
 })
 
 -- WTF!
 test("a = 1 + 2 - 3 * 4 / 5 % 6 ^ 7", {
-  {type="assignment", lhs={{type="var", name="a"}}, 
-    values={{type="binop", op="-",
-      left={type="binop", op="+",
-        left={type="num", value="1"},
-        right={type="num", value="2"}},
-      right={type="binop", op="%",
-        left={type="binop", op="/",
-          left={type="binop", op="*",
-            left={type="num", value="3"},
-            right={type="num", value="4"}},
-          right={type="num", value="5"}},
-        right={type="binop", op="^",
-          left={type="num", value="6"},
-          right={type="num", value="7"}},
+  {type="assignment", line=1, column=1, 
+    lhs={{type="var", name="a", line=1, column=1}},
+    values={{type="binop", op="-", line=1, column=11,
+      left={type="binop", op="+", line=1, column=7,
+        left={type="num", value="1", line=1, column=5},
+        right={type="num", value="2", line=1, column=9}},
+      right={type="binop", op="%", line=1, column=23,
+        left={type="binop", op="/", line=1, column=19,
+          left={type="binop", op="*", line=1, column=15,
+            left={type="num", value="3", line=1, column=13},
+            right={type="num", value="4", line=1, column=17}},
+          right={type="num", value="5", line=1, column=21}},
+        right={type="binop", op="^", line=1, column=27,
+          left={type="num", value="6", line=1, column=25},
+          right={type="num", value="7", line=1, column=29}},
       }
     }}
   }
 })
 
 test("local a = function() end == function() end", {
-  {type="local", names={"a"}, values={
-    {type="binop", op="==",
-      left={type="function", names={}, vararg=false, body={}},
-      right={type="function", names={}, vararg=false, body={}}
+  {type="local", names={"a"}, line=1, column=1, values={
+    {type="binop", op="==", line=1, column=26,
+      left={type="function", names={}, vararg=false, body={}, line=1, column=11},
+      right={type="function", names={}, vararg=false, body={}, line=1, column=29}
     }
   }}
 })
 
 test("local a = {{},{},{{}},}", {
-  {type="local", names={"a"}, 
+  {type="local", names={"a"}, line=1, column=1, 
     values={
-      {type="constructor", items={
-        {type="item", value={type="constructor", items={}}},
-        {type="item", value={type="constructor", items={}}},
+      {type="constructor", line=1, column=11, items={
+        {type="item", value={type="constructor", items={}, line=1, column=12}},
+        {type="item", value={type="constructor", items={}, line=1, column=15}},
         {type="item",
-          value={type="constructor", items={
-            {type="item", value={type="constructor", items={}}}
+          value={type="constructor", line=1, column=18, items={
+            {type="item", value={type="constructor", items={}, line=1, column=19}}
           }}
         },
       }}
@@ -351,19 +350,19 @@ test("local a = {{},{},{{}},}", {
 })
 
 test("local a = { a or b, c=1; ['foo']='bar', }", {
-  {type="local", names={"a"}, 
+  {type="local", names={"a"}, line=1, column=1, 
     values={
-      {type="constructor", items={
+      {type="constructor", line=1, column=11, items={
         {type="item", value={
-          type="binop", op="or",
-            left={type="var", name="a"},
-            right={type="var", name="b"}
+          type="binop", op="or", line=1, column=15,
+            left={type="var", name="a", line=1, column=13},
+            right={type="var", name="b", line=1, column=18}
           }
         },
-        {type="fielditem", key="c", value={type="num", value="1"}},
+        {type="fielditem", key="c", value={type="num", value="1", line=1, column=23}},
         {type="indexitem",
-          key={type="str", value="foo"},
-          value={type="str", value="bar"}
+          key={type="str", value="foo", line=1, column=27},
+          value={type="str", value="bar", line=1, column=34}
         },
       }}
     }
@@ -381,46 +380,46 @@ end
 add(1+2, 3)
 ]], {
   {
-    type="funcstat", method=false,
-    lhs={type="var", name="add"},
+    type="funcstat", method=false, line=1, column=1,
+    lhs={type="var", name="add", line=1, column=10},
     body={
       type="function", vararg=false,
       names={"a", "b"},
       body={
         {
-          type="local",
+          type="local", line=2, column=3,
           names={"r"},
           values={
             {
-              type="binop", op="+",
-              left={type="var", name="a"},
-              right={type="var", name="b"}
+              type="binop", op="+", line=2, column=14,
+              left={type="var", name="a", line=2, column=13},
+              right={type="var", name="b", line=2, column=15}
             }
           }
         }, {
-          type="call",
-          base={type="var", name="print"},
+          type="call", line=3, column=3,
+          base={type="var", name="print", line=3, column=3},
           values={
-            {type="var", name="r"}
+            {type="var", name="r", line=3, column=9}
           }
         }, {
-          type="return",
+          type="return", line=4, column=3,
           values={
-            {type="var", name="r"}
+            {type="var", name="r", line=4, column=10}
           }
         }
       }
     }
   }, {
-    type="call",
-    base={type="var", name="add"},
+    type="call", line=7, column=1,
+    base={type="var", name="add", line=7, column=1},
     values={
       {
-        type="binop", op="+",
-        left={type="num", value="1"},
-        right={type="num", value="2"}
+        type="binop", op="+", line=7, column=6,
+        left={type="num", value="1", line=7, column=5},
+        right={type="num", value="2", line=7, column=7}
       }, {
-        type="num", value="3"
+        type="num", value="3", line=7, column=10
       }
     }
   }

@@ -92,16 +92,34 @@ function lookahead ()
   return _lookahead
 end
 
+-- Returns a function tht when applied to a table, returns that table with
+-- additional "line" and "column" fields with the current token's position
+function get_pos ()
+  local line = 0
+  local column = 0
+  if token then
+    line = token.line
+    column = token.column
+  end
+  return function (tk)
+    tk.line=line
+    tk.column=column
+    return tk
+  end
+end
+
 --------------------------------------------------------------------------------
 ----                              Expressions                               ----
 --------------------------------------------------------------------------------
 
 function Parser.singlevar ()
+  local pos = get_pos()
   local nm = get_name()
-  return { type="var", name=nm }
+  return pos{ type="var", name=nm }
 end
 
 function constructor ()
+  local pos = get_pos()
   local tk = expect("{")
   local items = {}
 
@@ -128,14 +146,20 @@ function constructor ()
   end
   match("}", tk)
 
-  return { type = "constructor", items=items }
+  return pos{ type = "constructor", items=items }
 end
 
 function funcargs (exp, method)
   local args = {}
 
+  local ln, col = exp.line, exp.column
+
   local key
   if try(":") then
+    if token then
+      ln = token.line
+      col = token.column
+    end
     key = get_name()
   end
 
@@ -151,7 +175,7 @@ function funcargs (exp, method)
     match(")", tk)
   end
 
-  return {type="call", base=exp, values=args, key=key}
+  return {type="call", base=exp, values=args, key=key, line=ln, column=col}
 end
 
 function Parser.suffixedexp (msgerr)
@@ -174,9 +198,10 @@ function Parser.suffixedexp (msgerr)
       parens = false
 
     elseif try("[") then
+      local pos = get_pos()
       local index = Parser.expr()
       expect("]")
-      exp = {type="index", base=exp, key=index}
+      exp = pos{type="index", base=exp, key=index}
       parens = false
 
     elseif check(":", "(", "{", "STR") then
@@ -188,19 +213,20 @@ function Parser.suffixedexp (msgerr)
 end
 
 function Parser.simpleexp ()
+  local pos = get_pos()
   if check("NUM") then
-    return { type = "num", value = next().value }
+    return pos{ type = "num", value = next().value }
   elseif check("true", "false", "nil") then
-    return { type = "const", value = next().type }
+    return pos{ type = "const", value = next().type }
   elseif try("...") then
-    return { type = "vararg" }
+    return pos{ type = "vararg" }
   elseif check("STR") then
-    return { type="str", value = next().value }
+    return pos{ type="str", value = next().value }
   elseif check("{") then
     return constructor()
   elseif check("function") then
     local kw = next()
-    return Parser.funcbody(kw)
+    return pos(Parser.funcbody(kw))
   else
     return Parser.suffixedexp("invalid expression")
   end
@@ -237,7 +263,8 @@ function Parser.expr (limit)
 
   local left
   if check("not", "-", "~", "#") then
-    left = {
+    local pos = get_pos()
+    left = pos{
       type = "unop",
       op = next().type,
       expr = Parser.expr(unary_priority)
@@ -246,9 +273,10 @@ function Parser.expr (limit)
 
   local prio = token and priority[token.type]
   while prio and prio[1] > limit do
+    local pos = get_pos()
     local op = next().type
     local right = Parser.expr(prio[2])
-    left = {type = "binop", op=op, left=left, right=right}
+    left = pos{type = "binop", op=op, left=left, right=right}
     prio = token and priority[token.type]
   end
   return left
@@ -290,8 +318,9 @@ function fieldsel (base, method)
   if method then expect(":")
   else expect(".") end
 
+  local pos = get_pos()
   local name = get_name()
-  return {type="field", base=base, key=name}
+  return pos{type="field", base=base, key=name}
 end
 
 --------------------------------------------------------------------------------
@@ -300,6 +329,7 @@ end
 
 -- Statements that start with an expression: assignment and calls
 function Parser.exprstat ()
+  local pos = get_pos()
   local expr, parens = Parser.suffixedexp("invalid statement")
 
   if not parens and expr.type == "call" then return expr
@@ -324,7 +354,7 @@ function Parser.exprstat ()
     end
 
     local values = Parser.explist()
-    return {type = "assignment", lhs = lhs, values = values}
+    return pos{type = "assignment", lhs = lhs, values = values}
   end
 end
 
@@ -398,10 +428,11 @@ function Parser.ifstat ()
 end
 
 function Parser.statement ()
+  local pos = get_pos()
   if try(";") then return nil
 
   elseif check("if") then
-    return Parser.ifstat()
+    return pos(Parser.ifstat())
 
   elseif check("while") then
     local kw = next()
@@ -409,23 +440,23 @@ function Parser.statement ()
     expect("do")
     local body = Parser.statlist()
     match("end", kw)
-    return { type = "while", cond = cond, body = body }
+    return pos{ type = "while", cond = cond, body = body }
 
   elseif check("do") then
     local kw = next()
     local body = Parser.statlist()
     match("end", kw)
-    return { type = "do", body = body }
+    return pos{ type = "do", body = body }
 
   elseif check("for") then
-    return Parser.forstat()
+    return pos(Parser.forstat())
 
   elseif check("repeat") then
     local kw = next()
     local body = Parser.statlist()
     match("until", kw)
     local cond = Parser.expr()
-    return { type = "repeat", cond = cond, body = body }
+    return pos{ type = "repeat", cond = cond, body = body }
 
   elseif check("function") then
     local kw = expect("function")
@@ -441,14 +472,14 @@ function Parser.statement ()
     
     local body = Parser.funcbody(kw)
 
-    return { type = "funcstat", lhs = lhs, body = body, method = method }
+    return pos{ type = "funcstat", lhs = lhs, body = body, method = method }
 
   elseif try("local") then
     if check("function") then
       local kw = expect("function")
       local name = get_name()
       local body = Parser.funcbody(kw)
-      return { type = "localfunc", name = name, body = body}
+      return pos{ type = "localfunc", name = name, body = body}
     else
       local names = {}
 
@@ -460,13 +491,13 @@ function Parser.statement ()
         values = Parser.explist()
       end
 
-      return { type = "local", names=names, values=values }
+      return pos{ type = "local", names=names, values=values }
     end
 
   elseif try("::") then
     local name = get_name()
     expect("::")
-    return {type = "label", name = name}
+    return pos{type = "label", name = name}
 
   elseif try("return") then
     local list = {}
@@ -474,14 +505,14 @@ function Parser.statement ()
       list = Parser.explist()
     end
     try(";") -- Optional ;
-    return { type = "return", values = list }
+    return pos{ type = "return", values = list }
 
   elseif try("break") then
-    return { type = "break" }
+    return pos{ type = "break" }
 
   elseif try("goto") then
     local name = get_name()
-    return { type = "goto", name = name}
+    return pos{ type = "goto", name = name}
 
   else
     return Parser.exprstat()
