@@ -1,4 +1,2 @@
-local a = 4
-print("4" + a/2 .. "px")
---local c = a + b
---if 1 then end
+local a = {[1]=3,[2]=4,["a"]=42,[3]=5,[4]=6}
+print(a, a[0], a[1] + a[2], a[3+1] + a["a"])

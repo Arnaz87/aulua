@@ -110,6 +110,7 @@ any_t = core_m:type("any")
 bin_t = core_m:type("bin")
 int_t = int_m:type("int")
 string_t = str_m:type("string")
+stack_t = lua_m:type("Stack")
 
 newstr_f = str_m:func("new", {bin_t}, {string_t})
 str_f = lua_m:func("_string", {string_t}, {any_t})
@@ -118,7 +119,15 @@ int_f = lua_m:func("_int", {int_t}, {any_t})
 nil_f = lua_m:func("nil", {}, {any_t})
 true_f = lua_m:func("_true", {}, {any_t})
 false_f = lua_m:func("_false", {}, {any_t})
-print_f = lua_m:func("_print", {any_t}, {})
+print_f = lua_m:func("_print", {stack_t}, {stack_t})
+
+push_f = lua_m:func("push:Stack", {stack_t, any_t}, {})
+next_f = lua_m:func("next:Stack", {stack_t}, {any_t})
+stack_f = lua_m:func("newStack", {}, {stack_t})
+
+table_f = lua_m:func("newTable", {}, {any_t})
+get_f = lua_m:func("get", {any_t, any_t}, {any_t})
+set_f = lua_m:func("set", {any_t, any_t, any_t}, {})
 
 binops = {
   ["+"] = lua_m:func("add", {any_t,any_t}, {any_t}),
@@ -190,11 +199,36 @@ function compileExpr (node)
     local reg = main_f:reg()
     main_f:inst{"call", f, a, b}
     return reg
+  elseif tp == "index" then
+    local base = compileExpr(node.base)
+    local key = compileExpr(node.key)
+    local reg = main_f:reg()
+    main_f:inst{"call", get_f, base, key}
+    return reg
+  elseif tp == "constructor" then
+    local reg = main_f:reg()
+    main_f:inst{"call", table_f}
+    for i, item in ipairs(node.items) do
+      if item.type == "indexitem" then
+        local key = compileExpr(item.key)
+        local value = compileExpr(item.value)
+        main_f:inst{"call", set_f, reg, key, value}
+      else err("Only index items are supported in constructors", node) end
+    end
+    return reg
   elseif tp == "call" then
-    print(tostr(node))
-    if node.base.type == "var" and node.base.name == "print" and #node.values == 1 then
-      local arg = compileExpr(node.values[1])
-      main_f:inst{"call", print_f, arg}
+    if node.base.type == "var" and node.base.name == "print" then
+      local args = main_f:reg()
+      main_f:inst{"call", stack_f}
+      for i, v in ipairs(node.values) do
+        local arg = compileExpr(v)
+        main_f:inst{"call", push_f, args, arg}
+      end
+      local result = main_f:reg()
+      main_f:inst{"call", print_f, args}
+      local reg = main_f:reg()
+      main_f:inst{"call", next_f, result}
+      return reg
     else err("The only function supported is print with 1 argument", node) end
   else err("expression " .. tp .. " not supported", node) end
 end
@@ -224,9 +258,6 @@ end
 compileBlock(ast)
 main_f:inst{"end"}
 static_f:inst{"end"}
-
-print(tostr(constants))
-print(tostr(static_f))
 
 outfile = io.open("out", "wb")
 
@@ -310,6 +341,9 @@ function write_code (fn)
     elseif k == "call" then
       local f = inst[2]
       wint(f.id + 16)
+      if #inst-2 ~= #f.ins then
+        error(f.name .. " expects " .. #f.ins .. " arguments, but got " .. #inst-2)
+      end
       for i = 3, #inst do
         wint(inst[i].id)
       end
