@@ -54,7 +54,8 @@ function _m:type (name)
   return t
 end
 function _m:func (name, ins, outs)
-  local f = {id=#funcs, name=name, ins={}, outs={}, module=self.id}
+  local f = {_id=#funcs, name=name, ins={}, outs={}, module=self.id}
+  function f:id () return self._id end
   for i, t in ipairs(ins) do f.ins[i] = t.id end
   for i, t in ipairs(outs) do f.outs[i] = t.id end
   table.insert(funcs, f)
@@ -69,6 +70,7 @@ function module (name)
 end
 
 local _f = {}
+function _f:id () return self._id end
 function _f:reg ()
   local r = {id=#self.regs}
   table.insert(self.regs, r)
@@ -83,9 +85,9 @@ function _f:lbl ()
   self.lblc = l
   return l
 end
-function code (name, ignore)
+function code (name)
   local f = {
-    id=#funcs,
+    _id=#funcs,
     name=name,
     regs={},
     code={},
@@ -95,9 +97,7 @@ function code (name, ignore)
     locals={},
   }
   setmetatable(f, {__index = _f})
-  if not ignore then 
-    table.insert(funcs, f)
-  end
+  table.insert(funcs, f)
   return f
 end
 
@@ -140,14 +140,20 @@ binops = {
 constants = {}
 
 function constant (tp, value)
-  local data = {id=#constants, type=tp, value=value}
+  local data = {_id=#constants, type=tp, value=value, ins={}, outs={0}}
+  function data:id () return self._id + #funcs end
   table.insert(constants, data)
   return data
 end
 
-main_f = code("main")
+function constcall (f, ...)
+  local data = constant("call")
+  data.f = f
+  data.args = table.pack(...)
+  return data
+end
 
-static_f = code("static", true)
+main_f = code("main")
 
 function compileExpr (node)
   local tp = node.type
@@ -161,34 +167,18 @@ function compileExpr (node)
     main_f:inst{"call", f}
     return reg
   elseif tp == "num" then
-    local icns = constant("int", tonumber(node.value))
-    local cns = constant("null", any_t.id)
-    local c_reg1 = static_f:reg()
-    static_f:inst{"sgt", icns}
-    local c_reg2 = static_f:reg()
-    static_f:inst{"call", int_f, c_reg1}
-    static_f:inst{"sst", cns, c_reg2}
-
+    local n = tonumber(node.value)
+    local raw = constant("int", n)
+    local cns = constcall(int_f, raw)
     local reg = main_f:reg()
-    main_f:inst{"sgt", cns}
+    main_f:inst{"call", cns}
     return reg
   elseif tp == "str" then
-    local cns1 = constant("str", node.value)
-    local cns2 = constant("null", any_t.id)
-
-    static_f:inst{"sgt", cns1}
-    local reg1 = static_f:reg()
-
-    static_f:inst{"call", newstr_f, reg1}
-    local reg2 = static_f:reg()
-
-    static_f:inst{"call", str_f, reg2}
-    local reg3 = static_f:reg()
-
-    static_f:inst{"sst", cns2, reg3}
-
+    local raw = constant("bin", node.value)
+    local str = constcall(newstr_f, raw)
+    local cns = constcall(str_f, str)
     local reg = main_f:reg()
-    main_f:inst{"sgt", cns2}
+    main_f:inst{"call", cns}
     return reg
   elseif tp == "var" then
     return main_f.locals[node.name]
@@ -257,7 +247,6 @@ end
 
 compileBlock(ast)
 main_f:inst{"end"}
-static_f:inst{"end"}
 
 outfile = io.open("out", "wb")
 
@@ -281,10 +270,10 @@ function wstr (str)
   outfile:write(str)
 end
 
-outfile:write("Cobre ~4\0")
+outfile:write("Cobre 0.5\0")
 wint(#modules+1) -- Count the export module, but not the argument module
 wbyte(1, 1, 2) -- Export module is a module definition with 1 item, main
-wint(main_f.id)
+wint(main_f:id())
 wstr("main")
 for i, mod in ipairs(modules) do
   wbyte(0)
@@ -293,36 +282,40 @@ end
 
 wint(#types)
 for i, tp in ipairs(types) do
-  wbyte(1)
-  wint(tp.module)
+  wint(tp.module + 1)
   wstr(tp.name)
 end
 
 wint(#funcs)
 for i, fn in ipairs(funcs) do
   if fn.module then
-    wbyte(1)
-    wint(fn.module)
-    wstr(fn.name)
+    wint(fn.module + 2)
   elseif fn.code then
-    wbyte(2)
+    wbyte(1)
   end
   wint(#fn.ins)
   for i, t in ipairs(fn.ins) do wint(t) end
   wint(#fn.outs)
   for i, t in ipairs(fn.outs) do wint(t) end
+  if fn.module then wstr(fn.name) end
 end
 
 wint(#constants)
 for i, cns in ipairs(constants) do
   if cns.type == "int" then
-    wbyte(2)
+    wbyte(1)
     wint(cns.value)
-  elseif cns.type == "str" then
-    wbyte(3)
+  elseif cns.type == "bin" then
+    wbyte(2)
     wstr(cns.value)
-  elseif cns.type == "null" then
-    wint(cns.value + 16)
+  elseif cns.type == "call" then
+    if #cns.args ~= #cns.f.ins then
+      error(cns.f.name .. " expects " .. #cns.f.ins .. " arguments, but got " .. #cns.args)
+    end
+    wint(cns.f:id() + 16)
+    for i, v in ipairs(cns.args) do
+      wint(v:id())
+    end
   else error("constant " .. cns.type .. " not supported") end
 end
 
@@ -331,16 +324,9 @@ function write_code (fn)
   for i, inst in ipairs(fn.code) do
     local k = inst[1]
     if k == "end" then wbyte(0)
-    elseif k == "sgt" then
-      wbyte(4)
-      wint(inst[2].id)
-    elseif k == "sst" then
-      wbyte(5)
-      wint(inst[2].id)
-      wint(inst[3].id)
     elseif k == "call" then
       local f = inst[2]
-      wint(f.id + 16)
+      wint(f:id() + 16)
       if #inst-2 ~= #f.ins then
         error(f.name .. " expects " .. #f.ins .. " arguments, but got " .. #inst-2)
       end
@@ -355,8 +341,6 @@ end
 for i, fn in ipairs(funcs) do
   if fn.code then write_code(fn) end
 end
-
-write_code(static_f)
 
 wbyte(0) -- metadata
 
