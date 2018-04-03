@@ -3,6 +3,11 @@
 
 import cobre.core { type any; }
 
+import cobre.system {
+  void print (string);
+  void error (string);
+}
+
 import cobre.string {
   string itos (int);
   
@@ -35,9 +40,10 @@ import cobre.any (Table) {
   bool test (any) as testTable;
 }
 
-import cobre.system {
-  void print (string);
-  void error (string);
+import cobre.any (Function) {
+  any `new` (Function) as anyFn;
+  Function get (any) as getFn;
+  bool test (any) as testFn;
 }
 
 import cobre.array (any) {
@@ -48,6 +54,16 @@ import cobre.array (any) {
   }
   AnyArr empty () as emptyAnyArr;
 }
+
+import cobre.function (Stack as in0, Stack as out0) {
+  type `` as Function {
+    Stack apply (Stack);
+  }
+  module closure;
+}
+
+export Function;
+export closure;
 
 struct unit_t {bool dummy;}
 type nil_t (unit_t);
@@ -206,6 +222,7 @@ any _int (int n) { return anyInt(n); }
 any _true () { return anyBool(0<1); }
 any _false () { return anyBool(1<0); }
 any _string (string s) { return anyStr(s); }
+any _function (Function s) { return anyFn(s); }
 
 string tostr (any a) {
   if (testStr(a)) return getStr(a);
@@ -218,6 +235,7 @@ string tostr (any a) {
       return "false";
   }
   else if (testTable(a)) return "table";
+  else if (testFn(a)) return "function";
   else return "unknown";
 }
 
@@ -238,6 +256,16 @@ Stack _print (Stack args) {
   }
   print(str);
   return newStack();
+}
+
+Stack call (any _f, Stack args) {
+  if (testFn(_f)) {
+    Function f = getFn(_f);
+    Stack r = f.apply(args);
+    return r;
+  } else {
+    error("Lua: attempt to call a non-function value");
+  }
 }
 
 

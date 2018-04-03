@@ -1,19 +1,23 @@
-# Lua parser
+# Lua cobre compiler
 
-**Lua 5.3** parser made in *Lua 5.3*.
+Compiles **Lua 5.3** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm). Written in Lua. It is not yet able to compile itself.
 
-Intended to be small and simple. My main references for this code were:
+**Lisence**: This is free software, published under the
+  [WTFPL](http://www.wtfpl.net/)
+
+# Usage
+
+First you need to compile the Cobre library with [Culang](https://github.com/Arnaz87/culang), run `cobre culang lua.cu lua` and optionally `cobre --install lua`. Then, run `lua compiler.lua ` which currently inputs *test.lua* and outputs *out*, which is a cobre module, run with `cobre out`.
+
+# Parser
+
+The parser can be used independently from the compiler. My main references for it were:
 
 - [The original Lua](https://www.lua.org/source/5.3/)
 - [Yueliang](http://yueliang.luaforge.net/)
 - [LuaMinify](https://github.com/stravant/LuaMinify)
 
-**Lisence**: This is free software, published under the
-  [WTFPL](http://www.wtfpl.net/)
-
-## Usage
-
-Copy *lexer.lua* and *parser.lua* into your source directory.
+To use it, copy *lexer.lua* and *parser.lua* into your source directory.
 
 ~~~ lua
 local Parser = require("parser")
@@ -25,7 +29,7 @@ Parser.open("print('hello world')")
 local ast = Parser.parse()
 ~~~
 
-# AST Structure
+## AST Structure
 
 - STR: A string
 - BOOL: A boolean
@@ -34,7 +38,7 @@ local ast = Parser.parse()
 - [type]: A sequence of zero or more values of a type
 - node|node: An instance of any of the nodes (only nodes)
 - #category: not a node itself but an union of all the nodes following
-  (except for nodes deeper indented)
+  (not including nodes deeper indented)
 
 ~~~
 #program: [#statement]
@@ -75,7 +79,7 @@ local ast = Parser.parse()
     item:      value=#expr
 ~~~
 
-## Complex AST example
+## AST example
 
 ~~~ lua
 function add (a, b)
@@ -135,5 +139,5 @@ Output AST:
       }
     }
   }
-})
+}
 ~~~

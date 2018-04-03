@@ -105,12 +105,15 @@ core_m = module("cobre.core")
 int_m = module("cobre.int")
 str_m = module("cobre.string")
 lua_m = module("lua")
+closure_m = module("closure")
+closure_m.from = lua_m
 
 any_t = core_m:type("any")
 bin_t = core_m:type("bin")
 int_t = int_m:type("int")
 string_t = str_m:type("string")
 stack_t = lua_m:type("Stack")
+func_t = lua_m:type("Function")
 
 newstr_f = str_m:func("new", {bin_t}, {string_t})
 str_f = lua_m:func("_string", {string_t}, {any_t})
@@ -120,6 +123,8 @@ nil_f = lua_m:func("nil", {}, {any_t})
 true_f = lua_m:func("_true", {}, {any_t})
 false_f = lua_m:func("_false", {}, {any_t})
 print_f = lua_m:func("_print", {stack_t}, {stack_t})
+func_f = lua_m:func("_function", {func_t}, {any_t})
+call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
 push_f = lua_m:func("push:Stack", {stack_t, any_t}, {})
 next_f = lua_m:func("next:Stack", {stack_t}, {any_t})
@@ -153,99 +158,175 @@ function constcall (f, ...)
   return data
 end
 
-main_f = code("main")
+function _f:createFunction (node)
+  local fn = code("function")
+  fn.node = node
+  fn.parent = self
+  fn.ins = {stack_t.id, any_t.id}
+  fn.outs = {stack_t.id}
 
-function compileExpr (node)
+  -- First two registers are the arguments to the function
+  local vararg = fn:reg() -- First the argument stack
+  local upvals = fn:reg() -- Second the upvalues (currently not supported nil)
+
+  fn.locals["..."] = vararg
+  fn.upvalreg = upvals
+
+  -- Extract the named arguments and self
+  if node.method then
+    local reg = fn:reg()
+    fn:inst{"call", next_f, vararg}
+    fn.locals["self"] = reg
+  end
+
+  for i, argname in ipairs(node.names) do
+    local reg = fn:reg()
+    fn:inst{"call", next_f, vararg}
+    fn.locals[argname] = reg
+  end
+
+  fn:compileBlock(node.body)
+
+  local stackreg = fn:reg()
+  fn:inst{"call", stack_f}
+  fn:inst{"end", stackreg}
+
+  local argmod = module()
+  argmod.items = {{name="0", fn=fn}}
+
+  local mod = module()
+  mod.type = "build"
+  mod.base = closure_m
+  mod.argument = argmod
+
+  local fn_new = mod:func("new", {any_t}, {func_t})
+
+  local upvals = self:reg()
+  self:inst{"call", nil_f}
+  local raw = self:reg()
+  self:inst{"call", fn_new, upvals}
+  local reg = self:reg()
+  self:inst{"call", func_f, raw}
+  return reg
+end
+
+function _f:compileExpr (node)
   local tp = node.type
   if tp == "const" then
-    local reg = main_f:reg()
+    local reg = self:reg()
     local f
     if node.value == "nil" then f = nil_f
     elseif node.value == "true" then f = true_f
     elseif node.value == "false" then f = false_f
     end
-    main_f:inst{"call", f}
+    self:inst{"call", f}
     return reg
   elseif tp == "num" then
     local n = tonumber(node.value)
     local raw = constant("int", n)
     local cns = constcall(int_f, raw)
-    local reg = main_f:reg()
-    main_f:inst{"call", cns}
+    local reg = self:reg()
+    self:inst{"call", cns}
     return reg
   elseif tp == "str" then
     local raw = constant("bin", node.value)
     local str = constcall(newstr_f, raw)
     local cns = constcall(str_f, str)
-    local reg = main_f:reg()
-    main_f:inst{"call", cns}
+    local reg = self:reg()
+    self:inst{"call", cns}
     return reg
   elseif tp == "var" then
-    return main_f.locals[node.name]
+    local lcl = self.locals[node.name]
+    if lcl then
+      local reg = self:reg()
+      self:inst{"var", lcl}
+      return reg
+    else
+      if not self.locals["_ENV"] then
+        err("local \"_ENV\" not in sight", node)
+      end
+      err("global values not supported", node)
+    end
   elseif tp == "binop" then
     local f = binops[node.op]
-    local a = compileExpr(node.left)
-    local b = compileExpr(node.right)
-    local reg = main_f:reg()
-    main_f:inst{"call", f, a, b}
+    local a = self:compileExpr(node.left)
+    local b = self:compileExpr(node.right)
+    local reg = self:reg()
+    self:inst{"call", f, a, b}
     return reg
   elseif tp == "index" then
-    local base = compileExpr(node.base)
-    local key = compileExpr(node.key)
-    local reg = main_f:reg()
-    main_f:inst{"call", get_f, base, key}
+    local base = self:compileExpr(node.base)
+    local key = self:compileExpr(node.key)
+    local reg = self:reg()
+    self:inst{"call", get_f, base, key}
     return reg
+  elseif tp == "field" then
+    local key = {type="str", value=node.key}
+    return self:compileExpr{type="index", base=node.base, key=key}
+  elseif tp == "function" then
+    return self:createFunction(node)
   elseif tp == "constructor" then
-    local reg = main_f:reg()
-    main_f:inst{"call", table_f}
+    local reg = self:reg()
+    self:inst{"call", table_f}
     for i, item in ipairs(node.items) do
       if item.type == "indexitem" then
-        local key = compileExpr(item.key)
-        local value = compileExpr(item.value)
-        main_f:inst{"call", set_f, reg, key, value}
+        local key = self:compileExpr(item.key)
+        local value = self:compileExpr(item.value)
+        self:inst{"call", set_f, reg, key, value}
+      elseif item.type == "fielditem" then
+        local key = self:compileExpr{type="str",value=item.key}
+        local value = self:compileExpr(item.value)
+        self:inst{"call", set_f, reg, key, value}
       else err("Only index items are supported in constructors", node) end
     end
     return reg
   elseif tp == "call" then
+
+    local args = self:reg()
+    self:inst{"call", stack_f}
+    for i, v in ipairs(node.values) do
+      local arg = self:compileExpr(v)
+      self:inst{"call", push_f, args, arg}
+    end
+
+    local result
     if node.base.type == "var" and node.base.name == "print" then
-      local args = main_f:reg()
-      main_f:inst{"call", stack_f}
-      for i, v in ipairs(node.values) do
-        local arg = compileExpr(v)
-        main_f:inst{"call", push_f, args, arg}
-      end
-      local result = main_f:reg()
-      main_f:inst{"call", print_f, args}
-      local reg = main_f:reg()
-      main_f:inst{"call", next_f, result}
-      return reg
-    else err("The only function supported is print with 1 argument", node) end
+      result = self:reg()
+      self:inst{"call", print_f, args}
+    else
+      local f_reg = self:compileExpr(node.base)
+      result = self:reg()
+      self:inst{"call", call_f, f_reg, args}
+    end
+
+    local reg = self:reg()
+    self:inst{"call", next_f, result}
+    return reg
   else err("expression " .. tp .. " not supported", node) end
 end
 
-function compileStmt (node)
+function _f:compileStmt (node)
   local tp = node.type
   if tp == "local" then
     if (#node.names ~= #node.values) then
-      err("different number of names and expressions are not supported", node)
+      err("different number of names and values is not supported", node)
     end
     for i = 1, #node.names do
-      local reg = compileExpr(node.values[i])
-      main_f.locals[node.names[i]] = reg
+      local reg = self:compileExpr(node.values[i])
+      self.locals[node.names[i]] = reg
     end
-  elseif tp == "call" then compileExpr(node)
-  else
-    err("statement not supported: " .. tp, node)
-  end
+  elseif tp == "call" then self:compileExpr(node)
+  else err("statement not supported: " .. tp, node) end
 end
 
-function compileBlock (nodes)
+function _f:compileBlock (nodes)
   for i, node in ipairs(nodes) do
-    compileStmt(node)
+    self:compileStmt(node)
   end
 end
 
-compileBlock(ast)
+main_f = code("main")
+main_f:compileBlock(ast)
 main_f:inst{"end"}
 
 outfile = io.open("out", "wb")
@@ -275,9 +356,30 @@ wint(#modules+1) -- Count the export module, but not the argument module
 wbyte(1, 1, 2) -- Export module is a module definition with 1 item, main
 wint(main_f:id())
 wstr("main")
-for i, mod in ipairs(modules) do
-  wbyte(0)
-  wstr(mod.name)
+
+for _, mod in ipairs(modules) do
+  if mod.items then
+    wbyte(1)
+    wint(#mod.items)
+    for _, item in ipairs(mod.items) do
+      if item.fn then
+        wbyte(2)
+        wint(item.fn:id())
+      else err("Unknown item kind " .. v.type) end
+      wstr(item.name)
+    end
+  elseif mod.base and mod.argument then
+    wbyte(4)
+    wint(mod.base.id)
+    wint(mod.argument.id)
+  elseif mod.from then
+    wbyte(3)
+    wint(mod.from.id)
+    wstr(mod.name)
+  else -- import by default
+    wbyte(0)
+    wstr(mod.name)
+  end
 end
 
 wint(#types)
@@ -287,16 +389,16 @@ for i, tp in ipairs(types) do
 end
 
 wint(#funcs)
-for i, fn in ipairs(funcs) do
-  if fn.module then
-    wint(fn.module + 2)
-  elseif fn.code then
+for _, fn in ipairs(funcs) do
+  if fn.code then
     wbyte(1)
-  end
+  elseif fn.module then
+    wint(fn.module + 2)
+  else print("???") end
   wint(#fn.ins)
-  for i, t in ipairs(fn.ins) do wint(t) end
+  for _, t in ipairs(fn.ins) do wint(t) end
   wint(#fn.outs)
-  for i, t in ipairs(fn.outs) do wint(t) end
+  for _, t in ipairs(fn.outs) do wint(t) end
   if fn.module then wstr(fn.name) end
 end
 
@@ -323,7 +425,20 @@ function write_code (fn)
   wint(#fn.code)
   for i, inst in ipairs(fn.code) do
     local k = inst[1]
-    if k == "end" then wbyte(0)
+    if k == "end" then
+      if #inst-1 ~= #fn.outs then
+        error(fn.name .. " outputs " .. #fn.outs .. " results, but end instrucion has " .. #inst-1)
+      end
+      wbyte(0)
+      for i=2, #inst do
+        wint(inst[i].id)
+      end
+    elseif k == "var" then
+      -- Special instruction, the actual cobre instructions emited depends
+      -- on wether the name is a local value or an upvalue.
+      -- The sequence of instructions emited MUST USE EXACTLY ONE register
+      wbyte(3) -- For now only locals
+      wint(inst[2].id)
     elseif k == "call" then
       local f = inst[2]
       wint(f:id() + 16)
@@ -338,7 +453,7 @@ function write_code (fn)
 end
 
 -- Code
-for i, fn in ipairs(funcs) do
+for _, fn in ipairs(funcs) do
   if fn.code then write_code(fn) end
 end
 
