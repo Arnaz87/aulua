@@ -10,16 +10,17 @@ Parser.open(contents)
 ast = Parser.parse()
 if not ast then print("Error: " .. Parser.error) os.exit(1) end
 
-function tostr (obj, pre)
+function tostr (obj, level, pre)
+  level = level or 1
   pre = pre or ""
-  if type(obj) ~= "table" then
+  if type(obj) ~= "table" or level == 0 then
     return tostring(obj) end
 
   if #obj > 0 then
     local str = "["
     for i = 1, #obj do
       if i > 1 then str = str .. ", " end
-      str = str .. tostr(obj[i], pre)
+      str = str .. tostr(obj[i], level-1, pre)
     end
     return str .. "]"
   end
@@ -29,7 +30,7 @@ function tostr (obj, pre)
   for k, v in pairs(obj) do
     if first then first = false
     else str = str .. "," end
-    str = str .. "\n" .. pre .. "  " .. k .. " = " .. tostr(v, pre .. "  ")
+    str = str .. "\n" .. pre .. "  " .. k .. " = " .. tostr(v, level-1, pre .. "  ")
   end
   str = str .. "\n" .. pre .. "}"
   if first then return "[]" end
@@ -42,6 +43,10 @@ function err (msg, node)
   end
   error(msg)
 end
+
+--------------------------------------------------------------------------------
+----                                 Basics                                 ----
+--------------------------------------------------------------------------------
 
 modules = {}
 types = {}
@@ -85,6 +90,9 @@ function _f:lbl ()
   self.lblc = l
   return l
 end
+function _f:call (f, ...)
+  return self:inst{"call", f=f, args=table.pack(...)}
+end
 function code (name)
   local f = {
     _id=#funcs,
@@ -101,12 +109,33 @@ function code (name)
   return f
 end
 
+constants = {}
+
+function constant (tp, value)
+  local data = {_id=#constants, type=tp, value=value, ins={}, outs={0}}
+  function data:id () return self._id + #funcs end
+  table.insert(constants, data)
+  return data
+end
+
+function constcall (f, ...)
+  local data = constant("call")
+  data.f = f
+  data.args = table.pack(...)
+  return data
+end
+
+--------------------------------------------------------------------------------
+----                                Imports                                 ----
+--------------------------------------------------------------------------------
+
 core_m = module("cobre.core")
 int_m = module("cobre.int")
 str_m = module("cobre.string")
 lua_m = module("lua")
 closure_m = module("closure")
 closure_m.from = lua_m
+record_m = module("cobre.record")
 
 any_t = core_m:type("any")
 bin_t = core_m:type("bin")
@@ -142,20 +171,61 @@ binops = {
   [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
 }
 
-constants = {}
+--------------------------------------------------------------------------------
+----                                Compile                                 ----
+--------------------------------------------------------------------------------
 
-function constant (tp, value)
-  local data = {_id=#constants, type=tp, value=value, ins={}, outs={0}}
-  function data:id () return self._id + #funcs end
-  table.insert(constants, data)
-  return data
+function _f:initUpvals ()
+  local argmod = module()
+
+  local mod = module()
+  mod.base = record_m
+  mod.argument = argmod
+
+  self.upvalmod = mod
+  self.upvaltype = mod:type("")
+
+  self.uptypes = {}
+--  if self.parent then
+--    table.insert(self.uptypes, self.parent.upvaltype)
+--  end
+
+  self.upvalues = {}
 end
 
-function constcall (f, ...)
-  local data = constant("call")
-  data.f = f
-  data.args = table.pack(...)
-  return data
+function _f:compileUpvals ()
+  local items = {}
+
+  -- Insert upvalues instruction to a temporary array
+  local oldcode = self.code
+  self.code = {}
+
+  --[=[for i, tp in ipairs(self.uptypes) do
+    -- add the type to the arguments of the record module
+    table.insert(items, {name=tostr(i), tp=tp})
+
+    -- add an instruction to get the type of
+    if (self.uptypes != any_t)
+    local reg = self:call()
+  end]=]
+
+  self.upvalmod.argument.items = items
+  local new_f = self.upvalmod:func("new", {}, {self.upvaltype})
+
+  local reg = self:call(new_f)
+
+  -- Make space for new code
+  table.move(oldcode, 1, #oldcode, #self.code+1, tmp)
+  -- Insert new code at the beggining
+  table.move(self.code, 1, #self.code, 1, oldcode)
+  self.code = oldcode
+end
+
+function _f:get_local (name)
+  local lcl = self.locals[name]
+  if lcl then return lcl end
+
+  lcl = self
 end
 
 function _f:createFunction (node)
@@ -167,30 +237,33 @@ function _f:createFunction (node)
 
   -- First two registers are the arguments to the function
   local vararg = fn:reg() -- First the argument stack
-  local upvals = fn:reg() -- Second the upvalues (currently not supported nil)
+  local uparg = fn:reg() -- Second the upvalue tuple (currently not supported, always nil)
 
   fn.locals["..."] = vararg
-  fn.upvalreg = upvals
+  fn.uparg = uparg
+
+  fn:initUpvals()
 
   -- Extract the named arguments and self
   if node.method then
-    local reg = fn:reg()
-    fn:inst{"call", next_f, vararg}
-    fn.locals["self"] = reg
+    fn.locals["self"] = fn:call(next_f, vararg)
   end
 
   for i, argname in ipairs(node.names) do
-    local reg = fn:reg()
-    fn:inst{"call", next_f, vararg}
-    fn.locals[argname] = reg
+    fn.locals[argname] = fn:call(next_f, vararg)
   end
 
+  -- Main code
   fn:compileBlock(node.body)
 
-  local stackreg = fn:reg()
-  fn:inst{"call", stack_f}
-  fn:inst{"end", stackreg}
+  if node.body[#node.body].type ~= "return" then
+    local stackreg = fn:call(stack_f) 
+    fn:inst{"end", stackreg}
+  end
 
+  fn:compileUpvals()
+
+  -- Create and use the closure and function items
   local argmod = module()
   argmod.items = {{name="0", fn=fn}}
 
@@ -201,46 +274,35 @@ function _f:createFunction (node)
 
   local fn_new = mod:func("new", {any_t}, {func_t})
 
-  local upvals = self:reg()
-  self:inst{"call", nil_f}
-  local raw = self:reg()
-  self:inst{"call", fn_new, upvals}
-  local reg = self:reg()
-  self:inst{"call", func_f, raw}
-  return reg
+  -- Generate code in current function to create a runtime closure
+  local upvals = self:call(nil_f)
+  local raw = self:call(fn_new, upvals)
+  return self:call(func_f, raw)
 end
 
 function _f:compileExpr (node)
   local tp = node.type
   if tp == "const" then
-    local reg = self:reg()
     local f
     if node.value == "nil" then f = nil_f
     elseif node.value == "true" then f = true_f
     elseif node.value == "false" then f = false_f
     end
-    self:inst{"call", f}
-    return reg
+    return self:call(f)
   elseif tp == "num" then
     local n = tonumber(node.value)
     local raw = constant("int", n)
     local cns = constcall(int_f, raw)
-    local reg = self:reg()
-    self:inst{"call", cns}
-    return reg
+    return self:call(cns)
   elseif tp == "str" then
     local raw = constant("bin", node.value)
     local str = constcall(newstr_f, raw)
     local cns = constcall(str_f, str)
-    local reg = self:reg()
-    self:inst{"call", cns}
-    return reg
+    return self:call(cns)
   elseif tp == "var" then
-    local lcl = self.locals[node.name]
+    local lcl = self:get_local(node.name)
     if lcl then
-      local reg = self:reg()
-      self:inst{"var", lcl}
-      return reg
+      return self:inst{"var", lcl}
     else
       if not self.locals["_ENV"] then
         err("local \"_ENV\" not in sight", node)
@@ -251,57 +313,47 @@ function _f:compileExpr (node)
     local f = binops[node.op]
     local a = self:compileExpr(node.left)
     local b = self:compileExpr(node.right)
-    local reg = self:reg()
-    self:inst{"call", f, a, b}
-    return reg
+    return self:call(f, a, b)
   elseif tp == "index" then
     local base = self:compileExpr(node.base)
     local key = self:compileExpr(node.key)
-    local reg = self:reg()
-    self:inst{"call", get_f, base, key}
-    return reg
+    return self:call(get_f, base, key)
   elseif tp == "field" then
     local key = {type="str", value=node.key}
     return self:compileExpr{type="index", base=node.base, key=key}
   elseif tp == "function" then
     return self:createFunction(node)
   elseif tp == "constructor" then
-    local reg = self:reg()
-    self:inst{"call", table_f}
+    local reg = self:call(table_f)
     for i, item in ipairs(node.items) do
       if item.type == "indexitem" then
         local key = self:compileExpr(item.key)
         local value = self:compileExpr(item.value)
-        self:inst{"call", set_f, reg, key, value}
+        self:call(set_f, reg, key, value)
       elseif item.type == "fielditem" then
         local key = self:compileExpr{type="str",value=item.key}
         local value = self:compileExpr(item.value)
-        self:inst{"call", set_f, reg, key, value}
+        self:call(set_f, reg, key, value)
       else err("Only index items are supported in constructors", node) end
     end
     return reg
   elseif tp == "call" then
 
-    local args = self:reg()
-    self:inst{"call", stack_f}
+    local args = self:call(stack_f)
     for i, v in ipairs(node.values) do
       local arg = self:compileExpr(v)
-      self:inst{"call", push_f, args, arg}
+      self:call(push_f, args, arg)
     end
 
     local result
     if node.base.type == "var" and node.base.name == "print" then
-      result = self:reg()
-      self:inst{"call", print_f, args}
+      result = self:call(print_f, args)
     else
       local f_reg = self:compileExpr(node.base)
-      result = self:reg()
-      self:inst{"call", call_f, f_reg, args}
+      result = self:call(call_f, f_reg, args)
     end
 
-    local reg = self:reg()
-    self:inst{"call", next_f, result}
-    return reg
+    return self:call(next_f, result)
   else err("expression " .. tp .. " not supported", node) end
 end
 
@@ -325,11 +377,22 @@ function _f:compileBlock (nodes)
   end
 end
 
-main_f = code("main")
-main_f:compileBlock(ast)
-main_f:inst{"end"}
+--------------------------------------------------------------------------------
+----                                Writing                                 ----
+--------------------------------------------------------------------------------
+
+do -- main function
+  main_f = code("main")
+  main_f:initUpvals()
+  main_f:compileBlock(ast)
+  main_f:compileUpvals()
+  if ast[#ast].type ~= "return" then
+    main_f:inst{"end"}
+  end
+end
 
 outfile = io.open("out", "wb")
+
 
 function wbyte (...)
   outfile:write(string.char(...))
@@ -359,7 +422,7 @@ wstr("main")
 
 for _, mod in ipairs(modules) do
   if mod.items then
-    wbyte(1)
+    wbyte(1) -- define
     wint(#mod.items)
     for _, item in ipairs(mod.items) do
       if item.fn then
@@ -369,11 +432,11 @@ for _, mod in ipairs(modules) do
       wstr(item.name)
     end
   elseif mod.base and mod.argument then
-    wbyte(4)
+    wbyte(4)-- build
     wint(mod.base.id)
     wint(mod.argument.id)
   elseif mod.from then
-    wbyte(3)
+    wbyte(3) -- use
     wint(mod.from.id)
     wstr(mod.name)
   else -- import by default
@@ -422,6 +485,7 @@ for i, cns in ipairs(constants) do
 end
 
 function write_code (fn)
+  local regs = #fn.regs
   wint(#fn.code)
   for i, inst in ipairs(fn.code) do
     local k = inst[1]
@@ -436,17 +500,22 @@ function write_code (fn)
     elseif k == "var" then
       -- Special instruction, the actual cobre instructions emited depends
       -- on wether the name is a local value or an upvalue.
-      -- The sequence of instructions emited MUST USE EXACTLY ONE register
       wbyte(3) -- For now only locals
       wint(inst[2].id)
+
+      inst.id, regs = regs, regs+1
     elseif k == "call" then
-      local f = inst[2]
+      local f = inst.f
       wint(f:id() + 16)
-      if #inst-2 ~= #f.ins then
-        error(f.name .. " expects " .. #f.ins .. " arguments, but got " .. #inst-2)
+      if #inst.args ~= #f.ins then
+        error(f.name .. " expects " .. #f.ins .. " arguments, but got " .. #inst.args)
       end
-      for i = 3, #inst do
-        wint(inst[i].id)
+      for _, arg in ipairs(inst.args) do
+        wint(arg.id)
+      end
+      if #f.outs > 0 then
+        inst.id = regs
+        regs = regs + #f.outs
       end
     else error("Unsupported instruction: " .. k) end
   end
