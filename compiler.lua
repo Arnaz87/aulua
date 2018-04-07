@@ -191,6 +191,7 @@ function _f:initUpvals ()
 
   if self.parent then
     self.levels[self.parent] = self.uparg
+    self.getparent = self.upvalmod:func("get0", {self.upvaltype}, {self.parent.upvaltype})
   end
 end
 
@@ -210,7 +211,11 @@ function _f:compileUpvals ()
     table.insert(types, tp)
     table.insert(items, {name="0", tp=tp})
     table.insert(args, self.uparg)
-    self.getparent = self.upvalmod:func("get0", {self.upvaltype}, {tp})
+
+    if parent.parent then
+      self.levels[parent.parent] = self:call(parent.getparent, self.levels[parent])
+      parent = parent.parent
+    end
   end
 
   local nilreg = self:call(nil_f)
