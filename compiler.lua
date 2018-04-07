@@ -30,7 +30,7 @@ function tostr (obj, level, pre)
   for k, v in pairs(obj) do
     if first then first = false
     else str = str .. "," end
-    str = str .. "\n" .. pre .. "  " .. k .. " = " .. tostr(v, level-1, pre .. "  ")
+    str = str .. "\n" .. pre .. "  " .. tostring(k) .. " = " .. tostr(v, level-1, pre .. "  ")
   end
   str = str .. "\n" .. pre .. "}"
   if first then return "[]" end
@@ -176,6 +176,7 @@ binops = {
 --------------------------------------------------------------------------------
 
 function _f:initUpvals ()
+  -- Do not create instructions here because compileUpvals moves them all
   local argmod = module()
 
   local mod = module()
@@ -185,34 +186,47 @@ function _f:initUpvals ()
   self.upvalmod = mod
   self.upvaltype = mod:type("")
 
-  self.uptypes = {}
---  if self.parent then
---    table.insert(self.uptypes, self.parent.upvaltype)
---  end
+  self.upvals = 0
+  self.levels = { [self] = self:call() }
 
-  self.upvalues = {}
+  if self.parent then
+    self.levels[self.parent] = self.uparg
+  end
 end
 
 function _f:compileUpvals ()
+  -- Instructions created here will be put at the beggining
   local items = {}
+  local types = {}
+  local args = {}
 
-  -- Insert upvalues instruction to a temporary array
+  -- Insert instruction to a temporary array
   local oldcode = self.code
   self.code = {}
 
-  --[=[for i, tp in ipairs(self.uptypes) do
-    -- add the type to the arguments of the record module
-    table.insert(items, {name=tostr(i), tp=tp})
+  if self.parent then
+    local parent = self.parent
+    local tp = parent.upvaltype
+    table.insert(types, tp)
+    table.insert(items, {name="0", tp=tp})
+    table.insert(args, self.uparg)
+    self.getparent = self.upvalmod:func("get0", {self.upvaltype}, {tp})
+  end
 
-    -- add an instruction to get the type of
-    if (self.uptypes != any_t)
-    local reg = self:call()
-  end]=]
+  local nilreg = self:call(nil_f)
+  for i = 1, self.upvals do
+    local ix = i
+    if not self.parent then ix = i-1 end
+    table.insert(types, any_t)
+    table.insert(items, {name=tostring(ix), tp=any_t})
+    table.insert(args, nilreg)
+  end
 
   self.upvalmod.argument.items = items
-  local new_f = self.upvalmod:func("new", {}, {self.upvaltype})
+  local new_f = self.upvalmod:func("new", types, {self.upvaltype})
 
-  local reg = self:call(new_f)
+  self.levels[self].f = new_f
+  self.levels[self].args = args
 
   -- Make space for new code
   table.move(oldcode, 1, #oldcode, #self.code+1, tmp)
@@ -221,18 +235,33 @@ function _f:compileUpvals ()
   self.code = oldcode
 end
 
-function _f:get_local (name)
+function _f:get_local (name, upval)
   local lcl = self.locals[name]
-  if lcl then return lcl end
+  if lcl then
+    if upval and not lcl.level then
+      lcl.level = self
 
-  lcl = self
+      local ix = self.upvals
+      if self.parent then ix = ix+1 end
+
+      lcl.get = self.upvalmod:func("get"..ix, {self.upvaltype}, {any_t})
+      lcl.set = self.upvalmod:func("set"..ix, {self.upvaltype, any_t}, {})
+      
+      self.upvals = self.upvals+1
+    end
+    return lcl
+  end
+
+  if self.parent then
+    return self.parent:get_local(name, true)
+  end
 end
 
 function _f:createFunction (node)
   local fn = code("function")
   fn.node = node
   fn.parent = self
-  fn.ins = {stack_t.id, any_t.id}
+  fn.ins = {stack_t.id, self.upvaltype.id}
   fn.outs = {stack_t.id}
 
   -- First two registers are the arguments to the function
@@ -272,11 +301,10 @@ function _f:createFunction (node)
   mod.base = closure_m
   mod.argument = argmod
 
-  local fn_new = mod:func("new", {any_t}, {func_t})
+  local fn_new = mod:func("new", {self.upvaltype}, {func_t})
 
   -- Generate code in current function to create a runtime closure
-  local upvals = self:call(nil_f)
-  local raw = self:call(fn_new, upvals)
+  local raw = self:call(fn_new, self.levels[self])
   return self:call(func_f, raw)
 end
 
@@ -365,9 +393,23 @@ function _f:compileStmt (node)
     end
     for i = 1, #node.names do
       local reg = self:compileExpr(node.values[i])
-      self.locals[node.names[i]] = reg
+      self.locals[node.names[i]] = self:inst{"init", reg}
     end
   elseif tp == "call" then self:compileExpr(node)
+  elseif tp == "assignment" then
+    local ltp = node.lhs[1].type
+    if ltp == "var" then
+      local lcl = self:get_local(node.lhs[1].name)
+      if lcl then
+        local right = self:compileExpr(node.values[1])
+        self:inst{"set", lcl, right}
+      else
+        if not self.locals["_ENV"] then
+          err("local \"_ENV\" not in sight", node)
+        end
+        err("global values not supported", node)
+      end
+    else err("unknown left hand side node " .. ltp, node) end
   else err("statement not supported: " .. tp, node) end
 end
 
@@ -428,7 +470,10 @@ for _, mod in ipairs(modules) do
       if item.fn then
         wbyte(2)
         wint(item.fn:id())
-      else err("Unknown item kind " .. v.type) end
+      elseif item.tp then
+        wbyte(1)
+        wint(item.tp.id)
+      else err("Unknown item kind for " .. tostr(item)) end
       wstr(item.name)
     end
   elseif mod.base and mod.argument then
@@ -457,7 +502,7 @@ for _, fn in ipairs(funcs) do
     wbyte(1)
   elseif fn.module then
     wint(fn.module + 2)
-  else print("???") end
+  else error("???") end
   wint(#fn.ins)
   for _, t in ipairs(fn.ins) do wint(t) end
   wint(#fn.outs)
@@ -485,7 +530,38 @@ for i, cns in ipairs(constants) do
 end
 
 function write_code (fn)
+
+  -- Transform
+  for i, inst in ipairs(fn.code) do
+    if inst[1] == "var" then
+      local reg = inst[2]
+      if reg.level then
+        inst[1] = "call"
+        inst.f = reg.get
+        inst.args = {fn.levels[reg.level]}
+      else
+        inst[1] = "dup"
+      end
+    elseif inst[1] == "set" then
+      local reg = inst[2]
+      if reg.level then
+        inst[1] = "call"
+        inst.f = reg.set
+        inst.args = {fn.levels[reg.level], inst[3]}
+      end
+    elseif inst[1] == "init" then
+      if inst.level then
+        inst[1] = "call"
+        inst.f = inst.set
+        inst.args = {fn.levels[inst.level], inst[2]}
+      else
+        inst[1] = "dup"
+      end
+    end
+  end
+
   local regs = #fn.regs
+
   wint(#fn.code)
   for i, inst in ipairs(fn.code) do
     local k = inst[1]
@@ -497,12 +573,9 @@ function write_code (fn)
       for i=2, #inst do
         wint(inst[i].id)
       end
-    elseif k == "var" then
-      -- Special instruction, the actual cobre instructions emited depends
-      -- on wether the name is a local value or an upvalue.
+    elseif k == "dup" then
       wbyte(3) -- For now only locals
       wint(inst[2].id)
-
       inst.id, regs = regs, regs+1
     elseif k == "call" then
       local f = inst.f
