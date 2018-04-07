@@ -155,9 +155,11 @@ print_f = lua_m:func("_print", {stack_t}, {stack_t})
 func_f = lua_m:func("_function", {func_t}, {any_t})
 call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
+stack_f = lua_m:func("newStack", {}, {stack_t})
 push_f = lua_m:func("push:Stack", {stack_t, any_t}, {})
 next_f = lua_m:func("next:Stack", {stack_t}, {any_t})
-stack_f = lua_m:func("newStack", {}, {stack_t})
+getstack_f = lua_m:func("get:Stack", {stack_t}, {int_t})
+append_f = lua_m:func("append:Stack", {stack_t, stack_t}, {})
 
 table_f = lua_m:func("newTable", {}, {any_t})
 get_f = lua_m:func("get", {any_t, any_t}, {any_t})
@@ -313,6 +315,25 @@ function _f:createFunction (node)
   return self:call(func_f, raw)
 end
 
+function _f:compileCall (node)
+  local args = self:call(stack_f)
+  for i, v in ipairs(node.values) do
+    if i == #node.values and v.type == "call" then
+      local result = self:compileCall(v)
+      self:call(append_f, args, result)
+    else
+      local arg = self:compileExpr(v)
+      self:call(push_f, args, arg)
+    end
+  end
+
+  if node.base.type == "var" and node.base.name == "print" then
+    return self:call(print_f, args)
+  end
+  local f_reg = self:compileExpr(node.base)
+  return self:call(call_f, f_reg, args)
+end
+
 function _f:compileExpr (node)
   local tp = node.type
   if tp == "const" then
@@ -337,10 +358,12 @@ function _f:compileExpr (node)
     if lcl then
       return self:inst{"var", lcl}
     else
-      if not self.locals["_ENV"] then
-        err("local \"_ENV\" not in sight", node)
-      end
-      err("global values not supported", node)
+      local env = self:get_local("_ENV")
+      if not env then err("local \"_ENV\" not in sight", node) end
+
+      local base = self:inst{"var", env}
+      local key = self:compileExpr{type="str", value=node.name}
+      return self:call(get_f, base, key)
     end
   elseif tp == "binop" then
     local f = binops[node.op]
@@ -371,50 +394,89 @@ function _f:compileExpr (node)
     end
     return reg
   elseif tp == "call" then
-
-    local args = self:call(stack_f)
-    for i, v in ipairs(node.values) do
-      local arg = self:compileExpr(v)
-      self:call(push_f, args, arg)
-    end
-
-    local result
-    if node.base.type == "var" and node.base.name == "print" then
-      result = self:call(print_f, args)
-    else
-      local f_reg = self:compileExpr(node.base)
-      result = self:call(call_f, f_reg, args)
-    end
-
+    local result = self:compileCall(node)
     return self:call(next_f, result)
   else err("expression " .. tp .. " not supported", node) end
+end
+
+function _f:assign (vars, values)
+  local last = math.max(#vars, #values)
+  local stack
+
+  for i = 1, last do
+    local var, value, reg = vars[i], values[i]
+
+    if i == #values and value.type == "call" then
+      stack = self:compileCall(value)
+    end
+
+    if stack then
+      reg = self:call(next_f, stack)
+    elseif value then
+      reg = self:compileExpr(value)
+    else reg = self:call(nil_f) end
+
+    if var then
+      if var.lcl then
+        self.locals[var.lcl] = self:inst{"init", reg}
+      elseif var.base then
+        self:call(set_f, var.base, var.key, reg)
+      else
+        local lcl = self:get_local(var)
+        if lcl then
+          self:inst{"set", lcl, reg}
+        else
+          local env = self:get_local("_ENV")
+          if not env then err("local \"_ENV\" not in sight", node) end
+
+          local base = self:inst{"var", env}
+          local key = self:compileExpr{type="str", value=var}
+          self:call(set_f, base, key, reg)
+        end
+      end
+    end
+  end
 end
 
 function _f:compileStmt (node)
   local tp = node.type
   if tp == "local" then
-    if (#node.names ~= #node.values) then
-      err("different number of names and values is not supported", node)
+    local vars = {}
+    for i, name in ipairs(node.names) do
+      vars[i] = {lcl=name}
     end
-    for i = 1, #node.names do
-      local reg = self:compileExpr(node.values[i])
-      self.locals[node.names[i]] = self:inst{"init", reg}
-    end
+    self:assign(vars, node.values)
   elseif tp == "call" then self:compileExpr(node)
   elseif tp == "assignment" then
-    local ltp = node.lhs[1].type
-    if ltp == "var" then
-      local lcl = self:get_local(node.lhs[1].name)
-      if lcl then
-        local right = self:compileExpr(node.values[1])
-        self:inst{"set", lcl, right}
+    local vars = {}
+    for i, var in ipairs(node.lhs) do
+      if var.type == "var" then
+        vars[i] = var.name
+      elseif var.type == "index" then
+        local base = self:compileExpr(var.base)
+        local key = self:compileExpr(var.key)
+        vars[i] = {base=base, key=key}
+      elseif var.type == "field" then
+        local base = self:compileExpr(var.base)
+        local key = self:compileExpr{type="str", value=var.key}
+        vars[i] = {base=base, key=key}
+      else error("wtf") end
+    end
+    self:assign(vars, node.values)
+  elseif tp == "return" then
+
+    local stack = self:call(stack_f)
+    for i, v in ipairs(node.values) do
+      if i == #node.values and v.type == "call" then
+        local result = self:compileCall(v)
+        self:call(append_f, stack, result)
       else
-        if not self.locals["_ENV"] then
-          err("local \"_ENV\" not in sight", node)
-        end
-        err("global values not supported", node)
+        local arg = self:compileExpr(v)
+        self:call(push_f, stack, arg)
       end
-    else err("unknown left hand side node " .. ltp, node) end
+    end
+
+    self:inst{"end", stack}
   else err("statement not supported: " .. tp, node) end
 end
 
@@ -579,9 +641,13 @@ function write_code (fn)
         wint(inst[i].id)
       end
     elseif k == "dup" then
-      wbyte(3) -- For now only locals
+      wbyte(3)
       wint(inst[2].id)
       inst.id, regs = regs, regs+1
+    elseif k == "set" then
+      wbyte(4)
+      wint(inst[2].id)
+      wint(inst[3].id)
     elseif k == "call" then
       local f = inst.f
       wint(f:id() + 16)

@@ -93,6 +93,21 @@ struct Stack {
   bool more (Stack this) {
     return this.pos < this.arr.len();
   }
+
+  void append (Stack this, Stack that) {
+    int i = that.pos;
+    while (i < that.arr.len()) {
+      this.push(that.arr[i]);
+      i = i+1;
+    }
+  }
+
+  any get (Stack this, int i) {
+    int j = i + this.pos;
+    if (j <= this.arr.len())
+      return this.arr[j];
+    else return nil();
+  }
 }
 
 Stack newStack () {
@@ -251,7 +266,7 @@ Stack _print (Stack args) {
   while (args.more()) {
     any a = args.next();
     if (first) first = 1<0;
-    else str = str + " ";
+    else str = str + "\t";
     str = str + tostr(a);
   }
   print(str);
