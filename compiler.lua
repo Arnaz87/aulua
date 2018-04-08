@@ -19,10 +19,17 @@ function tostr (obj, level, pre)
   if #obj > 0 then
     local str = "["
     for i = 1, #obj do
-      if i > 1 then str = str .. ", " end
-      str = str .. tostr(obj[i], level-1, pre)
+      if i > 1 then str = str .. "," end
+      str = str .. "\n" .. pre .. "  " .. tostr(obj[i], level-1, pre .. "  ")
     end
-    return str .. "]"
+
+    for k, v in pairs(obj) do
+      if type(k) ~= "number" then
+        str = str .. ",\n" .. pre .. "  " .. tostring(k) .. " = " .. tostr(v, level-1, pre .. "  ")
+      end
+    end
+
+    return str .. "\n" .. pre .. "]"
   end
 
   local first = true
@@ -155,6 +162,8 @@ print_f = lua_m:func("_print", {stack_t}, {stack_t})
 func_f = lua_m:func("_function", {func_t}, {any_t})
 call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
+global_f = lua_m:func("create_global", {}, {any_t})
+
 stack_f = lua_m:func("newStack", {}, {stack_t})
 push_f = lua_m:func("push:Stack", {stack_t, any_t}, {})
 next_f = lua_m:func("next:Stack", {stack_t}, {any_t})
@@ -178,7 +187,7 @@ binops = {
 --------------------------------------------------------------------------------
 
 function _f:initUpvals ()
-  -- Do not create instructions here because compileUpvals moves them all
+  -- Do not generate instructions here, instead do it in compileUpvals
   local argmod = module()
 
   local mod = module()
@@ -292,7 +301,7 @@ function _f:createFunction (node)
   -- Main code
   fn:compileBlock(node.body)
 
-  if node.body[#node.body].type ~= "return" then
+  if #node.body == 0 or node.body[#node.body].type ~= "return" then
     local stackreg = fn:call(stack_f) 
     fn:inst{"end", stackreg}
   end
@@ -327,9 +336,6 @@ function _f:compileCall (node)
     end
   end
 
-  if node.base.type == "var" and node.base.name == "print" then
-    return self:call(print_f, args)
-  end
   local f_reg = self:compileExpr(node.base)
   return self:call(call_f, f_reg, args)
 end
@@ -380,19 +386,22 @@ function _f:compileExpr (node)
   elseif tp == "function" then
     return self:createFunction(node)
   elseif tp == "constructor" then
-    local reg = self:call(table_f)
-    for i, item in ipairs(node.items) do
+    local table = self:call(table_f)
+    local n = 1
+    for _, item in ipairs(node.items) do
+      local key
       if item.type == "indexitem" then
-        local key = self:compileExpr(item.key)
-        local value = self:compileExpr(item.value)
-        self:call(set_f, reg, key, value)
+        key = self:compileExpr(item.key)
       elseif item.type == "fielditem" then
-        local key = self:compileExpr{type="str",value=item.key}
-        local value = self:compileExpr(item.value)
-        self:call(set_f, reg, key, value)
-      else err("Only index items are supported in constructors", node) end
+        key = self:compileExpr{type="str",value=item.key}
+      elseif item.type == "item" then
+        key = self:compileExpr{type="num", value=n}
+        n = n+1
+      end
+      local value = self:compileExpr(item.value)
+      self:call(set_f, table, key, value)
     end
-    return reg
+    return table
   elseif tp == "call" then
     local result = self:compileCall(node)
     return self:call(next_f, result)
@@ -491,13 +500,28 @@ end
 --------------------------------------------------------------------------------
 
 do -- main function
-  main_f = code("main")
-  main_f:initUpvals()
-  main_f:compileBlock(ast)
-  main_f:compileUpvals()
+  lua_main = code("lua_main")
+  lua_main.ins = {any_t.id}
+  lua_main.outs = {stack_t.id}
+
+  lua_main:initUpvals()
+
+  local arg = lua_main:reg()
+  lua_main.locals["_ENV"] = lua_main:inst{"init", arg}
+  lua_main.locals["..."] = lua_main:call(stack_f)
+  lua_main:compileBlock(ast)
+
+  lua_main:compileUpvals()
+
   if ast[#ast].type ~= "return" then
-    main_f:inst{"end"}
+    local stack = lua_main:call(stack_f)
+    lua_main:inst{"end", stack}
   end
+
+  main = code("main")
+  local global = main:call(global_f)
+  main:call(lua_main, global)
+  main:inst{"end"}
 end
 
 outfile = io.open("out", "wb")
@@ -525,8 +549,14 @@ end
 
 outfile:write("Cobre 0.5\0")
 wint(#modules+1) -- Count the export module, but not the argument module
-wbyte(1, 1, 2) -- Export module is a module definition with 1 item, main
-wint(main_f:id())
+wbyte(1, 2) -- Export module is a module definition with 2 items
+
+wbyte(2) -- First item
+wint(lua_main:id())
+wstr("lua_main")
+
+wbyte(2) -- First item
+wint(main:id())
 wstr("main")
 
 for _, mod in ipairs(modules) do

@@ -59,6 +59,7 @@ import cobre.function (Stack as in0, Stack as out0) {
   type `` as Function {
     Stack apply (Stack);
   }
+  module `new` as newfn;
   module closure;
 }
 
@@ -260,19 +261,6 @@ bool tobool (any a) {
   else return 0<1;
 }
 
-Stack _print (Stack args) {
-  bool first = 0<1;
-  string str = "";
-  while (args.more()) {
-    any a = args.next();
-    if (first) first = 1<0;
-    else str = str + "\t";
-    str = str + tostr(a);
-  }
-  print(str);
-  return newStack();
-}
-
 Stack call (any _f, Stack args) {
   if (testFn(_f)) {
     Function f = getFn(_f);
@@ -342,4 +330,30 @@ any get (any t, any k) {
 void set (any t, any k, any v) {
   if (testTable(t)) getTable(t).set(k, v);
   else error("Lua: tried to index a non-table value (" + tostr(t) + ")");
+}
+
+//======= Builtins =======//
+
+Stack _print (Stack args) {
+  bool first = 0<1;
+  string str = "";
+  while (args.more()) {
+    any a = args.next();
+    if (first) first = 1<0;
+    else str = str + "\t";
+    str = str + tostr(a);
+  }
+  print(str);
+  return newStack();
+}
+
+import module newfn (_print) {
+  Function `` () as __print;
+}
+
+any create_global () {
+  Table tbl = new Table(emptyPairArr());
+  tbl.set(anyStr("print"), _function(__print()));
+  tbl.set(anyStr("_G"), anyTable(tbl));
+  return anyTable(tbl);
 }
