@@ -1,10 +1,10 @@
 
 // TODO: Use 64 bit floats, when available in cobre
 
-import cobre.core { type any; }
+import cobre.any { type any; }
 
 import cobre.system {
-  void print (string);
+  void println (string);
   void error (string);
 }
 
@@ -240,19 +240,25 @@ any _false () { return anyBool(1<0); }
 any _string (string s) { return anyStr(s); }
 any _function (Function s) { return anyFn(s); }
 
+string typestr (any a) {
+  if (testTable(a)) return "table";
+  else if (testStr(a)) return "string";
+  else if (testInt(a)) return "number";
+  else if (testNil(a)) return "nil";
+  else if (testBool(a)) return "bool";
+  else if (testFn(a)) return "function";
+  else return "unknown";
+}
+
 string tostr (any a) {
   if (testStr(a)) return getStr(a);
   else if (testInt(a)) return itos(getInt(a));
-  else if (testNil(a)) return "nil";
   else if (testBool(a)) {
     if (getBool(a))
       return "true";
     else
       return "false";
-  }
-  else if (testTable(a)) return "table";
-  else if (testFn(a)) return "function";
-  else return "unknown";
+  } else return typestr(a);
 }
 
 bool tobool (any a) {
@@ -334,6 +340,12 @@ void set (any t, any k, any v) {
 
 //======= Builtins =======//
 
+Stack stackof (any a) {
+  Stack stack = newStack();
+  stack.push(a);
+  return stack;
+}
+
 Stack _print (Stack args) {
   bool first = 0<1;
   string str = "";
@@ -343,17 +355,52 @@ Stack _print (Stack args) {
     else str = str + "\t";
     str = str + tostr(a);
   }
-  print(str);
+  println(str);
   return newStack();
-}
+} import module newfn (_print) { Function `` () as __print; }
 
-import module newfn (_print) {
-  Function `` () as __print;
+Stack _assert (Stack args) {
+  any val = args.next();
+  if (tobool(val)) {
+    Stack ret = newStack();
+    ret.push(val);
+    return ret;
+  } else {
+    any amsg = args.next();
+    string msg = tostr(amsg);
+    if (testNil(amsg)) msg = "assertion failed!";
+    error(msg);
+  }
+} import module newfn (_assert) { Function `` () as __assert; }
+
+Stack _error (Stack args) { error(tostr(args.next())); }
+import module newfn (_error) { Function `` () as __error; }
+
+Stack _tostring (Stack args) { return stackof(anyStr(tostr(args.next()))); }
+import module newfn (_tostring) { Function `` () as __tostring; }
+
+Stack _tonumber (Stack args) {
+  int n; bool b;
+  n, b = getNum(args.next());
+  if (b) return stackof(anyInt(n));
+  else return stackof(nil());
 }
+import module newfn (_tonumber) { Function `` () as __tonumber; }
+
+Stack _type (Stack args) { return stackof(anyStr(typestr(args.next()))); }
+import module newfn (_type) { Function `` () as __type; }
 
 any create_global () {
   Table tbl = new Table(emptyPairArr());
-  tbl.set(anyStr("print"), _function(__print()));
+
   tbl.set(anyStr("_G"), anyTable(tbl));
+  tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
+  tbl.set(anyStr("print"), _function(__print()));
+  tbl.set(anyStr("error"), _function(__error()));
+  tbl.set(anyStr("assert"), _function(__assert()));
+  tbl.set(anyStr("tostring"), _function(__tostring()));
+  tbl.set(anyStr("tonumber"), _function(__tonumber()));
+  tbl.set(anyStr("type"), _function(__type()));
+
   return anyTable(tbl);
 }

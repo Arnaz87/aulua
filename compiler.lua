@@ -136,16 +136,17 @@ end
 ----                                Imports                                 ----
 --------------------------------------------------------------------------------
 
-core_m = module("cobre.core")
-int_m = module("cobre.int")
-str_m = module("cobre.string")
+int_m = module("cobre\x1fint")
+str_m = module("cobre\x1fstring")
 lua_m = module("lua")
 closure_m = module("closure")
 closure_m.from = lua_m
-record_m = module("cobre.record")
+record_m = module("cobre\x1frecord")
+any_m = module("cobre\x1fany")
+buffer_m = module("cobre\x1fbuffer")
 
-any_t = core_m:type("any")
-bin_t = core_m:type("bin")
+any_t = any_m:type("any")
+bin_t = buffer_m:type("buffer")
 int_t = int_m:type("int")
 string_t = str_m:type("string")
 stack_t = lua_m:type("Stack")
@@ -165,10 +166,10 @@ call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 global_f = lua_m:func("create_global", {}, {any_t})
 
 stack_f = lua_m:func("newStack", {}, {stack_t})
-push_f = lua_m:func("push:Stack", {stack_t, any_t}, {})
-next_f = lua_m:func("next:Stack", {stack_t}, {any_t})
-getstack_f = lua_m:func("get:Stack", {stack_t}, {int_t})
-append_f = lua_m:func("append:Stack", {stack_t, stack_t}, {})
+push_f = lua_m:func("push\x1dStack", {stack_t, any_t}, {})
+next_f = lua_m:func("next\x1dStack", {stack_t}, {any_t})
+getstack_f = lua_m:func("get\x1dStack", {stack_t}, {int_t})
+append_f = lua_m:func("append\x1dStack", {stack_t, stack_t}, {})
 
 table_f = lua_m:func("newTable", {}, {any_t})
 get_f = lua_m:func("get", {any_t, any_t}, {any_t})
@@ -547,9 +548,9 @@ function wstr (str)
   outfile:write(str)
 end
 
-outfile:write("Cobre 0.5\0")
+outfile:write("Cobre 0.6\0")
 wint(#modules+1) -- Count the export module, but not the argument module
-wbyte(1, 2) -- Export module is a module definition with 2 items
+wbyte(2, 2) -- Export module is a module definition with 2 items
 
 wbyte(2) -- First item
 wint(lua_main:id())
@@ -561,7 +562,7 @@ wstr("main")
 
 for _, mod in ipairs(modules) do
   if mod.items then
-    wbyte(1) -- define
+    wbyte(2) -- define
     wint(#mod.items)
     for _, item in ipairs(mod.items) do
       if item.fn then
@@ -582,7 +583,7 @@ for _, mod in ipairs(modules) do
     wint(mod.from.id)
     wstr(mod.name)
   else -- import by default
-    wbyte(0)
+    wbyte(1)
     wstr(mod.name)
   end
 end

@@ -1,8 +1,5 @@
 --local _ENV = _ENV
-local x = 3+4
-local f = function ()
-  local g = function () print(32) end
-  return g()
-end
-local a = f()
-print(a)
+print(tostring({}))
+print(tonumber({}))
+print(tostring(4), type(tostring(4)))
+print(tonumber(4), type(tonumber(4)))
