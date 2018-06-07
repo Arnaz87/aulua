@@ -130,16 +130,16 @@ int atoi (string str) {
 bool isDigit (int code) {
   if (code >= 48) { // 0
     if (code <= 57) { // 9
-      return 0<1; // true
+      return true; // true
     }
   }
   return 0<0; // false
 }
 
 bool isSpace (int code) {
-  if (code == 9)  { return 0<1; } // \t
-  if (code == 10) { return 0<1; } // \n
-  if (code == 32) { return 0<1; } // ' '
+  if (code == 9)  { return true; } // \t
+  if (code == 10) { return true; } // \n
+  if (code == 32) { return true; } // ' '
   return 0<0; // false
 }
 
@@ -157,19 +157,19 @@ int, bool parseNum (string str) {
     int code = codeof(ch);
     value = (value*10) + (code-48);
   }
-  return value, 0<1;
+  return value, true;
 }
 
 int, bool getNum (any a) {
   if (testInt(a)) {
-    return getInt(a), 0<1;
+    return getInt(a), true;
   } else if (testStr(a)) {
     string str = getStr(a);
     int value; bool b;
     value, b = parseNum(str);
     return value, b;
   }
-  return 0, 1<0;
+  return 0, false;
 }
 
 int, int, bool getNums (any a, any b) {
@@ -178,17 +178,17 @@ int, int, bool getNums (any a, any b) {
   if (t) {
     ib, t = getNum(b);
     if (t) {
-      return ia, ib, 0<1;
+      return ia, ib, true;
     }
   }
-  return 0, 0, 1<0;
+  return 0, 0, false;
 }
 
 int, int, bool getInts (any a, any b) {
   if (testInt(a)) if (testInt(b)) {
     return getInt(a), getInt(b), 1>0;
   }
-  return 0, 0, 1<0;
+  return 0, 0, false;
 }
 
 any add (any a, any b) {
@@ -232,11 +232,11 @@ any concat (any a, any b) {
 }
 
 // TODO: Real nil, not just 0
-any nil () { return anyNil(new unit_t(0<1) as nil_t); }
+any nil () { return anyNil(new unit_t(true) as nil_t); }
 
 any _int (int n) { return anyInt(n); }
-any _true () { return anyBool(0<1); }
-any _false () { return anyBool(1<0); }
+any _true () { return anyBool(true); }
+any _false () { return anyBool(false); }
 any _string (string s) { return anyStr(s); }
 any _function (Function s) { return anyFn(s); }
 
@@ -263,8 +263,8 @@ string tostr (any a) {
 
 bool tobool (any a) {
   if (testBool(a)) return getBool(a);
-  else if (testNil(a)) return 1<0;
-  else return 0<1;
+  else if (testNil(a)) return false;
+  else return true;
 }
 
 Stack call (any _f, Stack args) {
@@ -283,7 +283,7 @@ Stack call (any _f, Stack args) {
 bool equals (any a, any b) {
   if (testInt(a)) if (testInt(b)) return getInt(a) == getInt(b);
   if (testStr(a)) if (testStr(b)) return getStr(a) == getStr(b);
-  return 1 < 0;
+  return false;
 }
 
 void checkKey (any a) {
@@ -347,11 +347,11 @@ Stack stackof (any a) {
 }
 
 Stack _print (Stack args) {
-  bool first = 0<1;
+  bool first = true;
   string str = "";
   while (args.more()) {
     any a = args.next();
-    if (first) first = 1<0;
+    if (first) first = false;
     else str = str + "\t";
     str = str + tostr(a);
   }

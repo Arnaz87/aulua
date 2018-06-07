@@ -93,8 +93,8 @@ function _f:inst (data)
   return data
 end
 function _f:lbl ()
-  local l = self.lblc + 1
-  self.lblc = l
+  local l = self.label_count + 1
+  self.label_count = l
   return l
 end
 function _f:call (f, ...)
@@ -106,7 +106,8 @@ function code (name)
     name=name,
     regs={},
     code={},
-    lblc=0,
+    label_count=0,
+    labels={},
     ins={},
     outs={},
     locals={},
@@ -326,7 +327,17 @@ function _f:createFunction (node)
 end
 
 function _f:compileCall (node)
+  local base = self:compileExpr(node.base)
+  local f_reg = base
+  if node.key then
+    local key = self:compileExpr{type="str", value=node.key}
+    f_reg = self:call(get_f, base, key)
+  end
+
   local args = self:call(stack_f)
+  if node.key then
+    self:call(push_f, args, base)
+  end
   for i, v in ipairs(node.values) do
     if i == #node.values and v.type == "call" then
       local result = self:compileCall(v)
@@ -337,7 +348,6 @@ function _f:compileCall (node)
     end
   end
 
-  local f_reg = self:compileExpr(node.base)
   return self:call(call_f, f_reg, args)
 end
 
@@ -448,6 +458,21 @@ function _f:assign (vars, values)
   end
 end
 
+function _f:compileLhs (node)
+  if node.type == "var" then return node.name
+  elseif node.type == "index" then
+    return {
+      base = self:compileExpr(node.base),
+      key = self:compileExpr(node.key)
+    }
+  elseif node.type == "field" then
+    return {
+      base = self:compileExpr(node.base),
+      key = self:compileExpr{type="str", value=node.key}
+    }
+  else error("wtf") end
+end
+
 function _f:compileStmt (node)
   local tp = node.type
   if tp == "local" then
@@ -460,17 +485,7 @@ function _f:compileStmt (node)
   elseif tp == "assignment" then
     local vars = {}
     for i, var in ipairs(node.lhs) do
-      if var.type == "var" then
-        vars[i] = var.name
-      elseif var.type == "index" then
-        local base = self:compileExpr(var.base)
-        local key = self:compileExpr(var.key)
-        vars[i] = {base=base, key=key}
-      elseif var.type == "field" then
-        local base = self:compileExpr(var.base)
-        local key = self:compileExpr{type="str", value=var.key}
-        vars[i] = {base=base, key=key}
-      else error("wtf") end
+      vars[i] = self:compileLhs(var)
     end
     self:assign(vars, node.values)
   elseif tp == "return" then
@@ -487,6 +502,13 @@ function _f:compileStmt (node)
     end
 
     self:inst{"end", stack}
+  elseif tp == "funcstat" then
+    if node.method then
+      table.insert(node.body.names, 1, "self")
+    end
+    self:assign({self:compileLhs(node.lhs)}, {node.body})
+  elseif tp == "localfunc" then
+    self:assign({{lcl=node.name}}, {node.body})
   else err("statement not supported: " .. tp, node) end
 end
 
