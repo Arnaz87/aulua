@@ -267,6 +267,23 @@ bool tobool (any a) {
   else return true;
 }
 
+bool equals (any a, any b) {
+  if (testInt(a) && testInt(b)) return getInt(a) == getInt(b);
+  if (testStr(a) && testStr(b)) return getStr(a) == getStr(b);
+  if (testBool(a) && testBool(b)) {
+    bool _a = getBool(a), _b = getBool(b);
+    return (_a && _b) || (!_a && !_b);
+  }
+  /*if (testTable(a) && testTable(b)) {
+    Table ta = getTable(a);
+    Table tb = getTable(b);
+  }*/
+  return false;
+}
+
+any eq (any a, any b) { return anyBool(equals(a, b)); }
+any ne (any a, any b) { return anyBool(!equals(a, b)); }
+
 Stack call (any _f, Stack args) {
   if (testFn(_f)) {
     Function f = getFn(_f);
@@ -279,12 +296,6 @@ Stack call (any _f, Stack args) {
 
 
 //======= Objects =======//
-
-bool equals (any a, any b) {
-  if (testInt(a)) if (testInt(b)) return getInt(a) == getInt(b);
-  if (testStr(a)) if (testStr(b)) return getStr(a) == getStr(b);
-  return false;
-}
 
 void checkKey (any a) {
   if (testStr(a)) return;

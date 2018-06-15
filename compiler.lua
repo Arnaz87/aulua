@@ -167,6 +167,7 @@ end
 --------------------------------------------------------------------------------
 
 int_m = module("cobre\x1fint")
+bool_m = module("cobre\x1fbool")
 str_m = module("cobre\x1fstring")
 lua_m = module("lua")
 closure_m = module("closure")
@@ -176,6 +177,7 @@ any_m = module("cobre\x1fany")
 buffer_m = module("cobre\x1fbuffer")
 
 any_t = any_m:type("any")
+bool_t = bool_m:type("bool")
 bin_t = buffer_m:type("buffer")
 int_t = int_m:type("int")
 string_t = str_m:type("string")
@@ -189,7 +191,7 @@ int_f = lua_m:func("_int", {int_t}, {any_t})
 nil_f = lua_m:func("nil", {}, {any_t})
 true_f = lua_m:func("_true", {}, {any_t})
 false_f = lua_m:func("_false", {}, {any_t})
-print_f = lua_m:func("_print", {stack_t}, {stack_t})
+bool_f = lua_m:func("tobool", {any_t}, {bool_t})
 func_f = lua_m:func("_function", {func_t}, {any_t})
 call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
@@ -211,6 +213,8 @@ binops = {
   ["*"] = lua_m:func("mul", {any_t,any_t}, {any_t}),
   ["/"] = lua_m:func("div", {any_t,any_t}, {any_t}),
   [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
+  ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
+  ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),
 }
 
 --------------------------------------------------------------------------------
@@ -582,6 +586,20 @@ function _f:compileStmt (node)
     self:assign({self:compileLhs(node.lhs)}, {node.body})
   elseif tp == "localfunc" then
     self:assign({{lcl=node.name}}, {node.body})
+  elseif tp == "if" then
+    local if_end = self:lbl()
+    for _, clause in ipairs(node.clauses) do
+      local clause_end = self:lbl()
+      local cond = self:compileExpr(clause.cond)
+      self:inst{"nif", clause_end, cond}
+      self:compileBlock(clause.body)
+      self:inst{"jmp", if_end}
+      self:inst{"label", clause_end}
+    end
+    if node.els then
+      self:compileBlock(node.els)
+    end
+    self:inst{"label", if_end}
   else err("statement not supported: " .. tp, node) end
 end
 
@@ -594,7 +612,7 @@ end
 function _f:transform ()
   local oldcode = self.code
   self.code = {}
-  function push (x) table.insert(self.code, x) end
+  self.labels = {}
 
   local regcount = #self.ins
   function reginc ()
@@ -610,9 +628,9 @@ function _f:transform ()
       if inst.is_upval then
         local reg = self.upval_level_regs[self.level]
         local setter = self.upval_accessors[inst.upval_id].setter
-        push{setter, reg, arg}
+        self:inst{setter, reg, arg}
       elseif arg[1] == "var" and not arg.is_upval then
-        push{"dup", arg[1]}
+        self:inst{"dup", arg[1]}
         inst.reg = reginc()
       elseif arg.reg then
         inst.reg = arg.reg
@@ -623,7 +641,7 @@ function _f:transform ()
         local reg = self.upval_level_regs[var.upval_level]
         local owner = self:get_level_ancestor(var.upval_level)
         local getter = owner.upval_accessors[var.upval_id].getter
-        push{getter, reg}
+        self:inst{getter, reg}
         inst.reg = reginc()
       else
         inst.reg = inst[2].reg
@@ -634,8 +652,14 @@ function _f:transform ()
         local reg = self.upval_level_regs[var.upval_level]
         local owner = self:get_level_ancestor(var.upval_level)
         local setter = owner.upval_accessors[var.upval_id].setter
-        push{setter, reg, arg}
-      else push(inst) end
+        self:inst{setter, reg, arg}
+      else self:inst(inst) end
+    elseif f == "label" then
+      self.labels[inst[2]] = #self.code
+    elseif f == "jif" or f == "nif" then
+      inst[3] = self:inst{bool_f, inst[3]}
+      inst[3].reg = reginc()
+      self:inst(inst)
     elseif type(f) == "table" then
 
       if #inst-1 ~= #f.ins then
@@ -647,8 +671,8 @@ function _f:transform ()
       elseif #f.outs > 1 then
         error("Function with multiple returns?")
       end
-      push(inst)
-    else push(inst) end
+      self:inst(inst)
+    else self:inst(inst) end
   end
 end
 
@@ -792,37 +816,6 @@ function write_code (fn)
   local newcode = {}
   local regcount = 0
 
-  -- Transform
-  --[=[
-  for i, inst in ipairs(fn.code) do
-    if inst[1] == "var" then
-      local reg = inst[2]
-      if reg.level then
-        inst[1] = "call"
-        inst.f = reg.get
-        inst.args = {fn.levels[reg.level]}
-      else
-        inst[1] = "dup"
-      end
-    elseif inst[1] == "set" then
-      local reg = inst[2]
-      if reg.level then
-        inst[1] = "call"
-        inst.f = reg.set
-        inst.args = {fn.levels[reg.level], inst[3]}
-      end
-    elseif inst[1] == "init" then
-      if inst.level then
-        inst[1] = "call"
-        inst.f = inst.set
-        inst.args = {fn.levels[inst.level], inst[2]}
-      else
-        inst[1] = "dup"
-      end
-    end
-  end
-  ]=]
-
   local regs = #fn.regs
 
   wint(#fn.code)
@@ -844,13 +837,24 @@ function write_code (fn)
       wbyte(4)
       wint(inst[2].reg)
       wint(inst[3].reg)
+    elseif f == "jmp" then
+      wbyte(5)
+      wint(fn.labels[inst[2]])
+    elseif f == "jif" then
+      wbyte(6)
+      wint(fn.labels[inst[2]])
+      wint(inst[3].reg)
+    elseif f == "nif" then
+      wbyte(7)
+      wint(fn.labels[inst[2]])
+      wint(inst[3].reg)
     elseif type(f) == "table" then
       -- Function call
       wint(f:id() + 16)
       for i = 2, #inst do
         wint(inst[i].reg)
       end
-    else error("Unsupported instruction: " .. k) end
+    else error("Unsupported instruction: " .. f) end
   end
 end
 
