@@ -281,8 +281,22 @@ bool equals (any a, any b) {
   return false;
 }
 
+bool _lt (any a, any b) {
+  if (testInt(a) && testInt(b)) return getInt(a) < getInt(b);
+  error("Lua: attempt to compare " + typestr(a) + " with " + typestr(b));
+}
+
+bool _le (any a, any b) {
+  if (testInt(a) && testInt(b)) return getInt(a) <= getInt(b);
+  error("Lua: attempt to compare " + typestr(a) + " with " + typestr(b));
+}
+
 any eq (any a, any b) { return anyBool(equals(a, b)); }
 any ne (any a, any b) { return anyBool(!equals(a, b)); }
+any lt (any a, any b) { return anyBool(_lt(a, b)); }
+any le (any a, any b) { return anyBool(_le(a, b)); }
+any gt (any a, any b) { return anyBool(!_le(a, b)); }
+any ge (any a, any b) { return anyBool(!_lt(a, b)); }
 
 Stack call (any _f, Stack args) {
   if (testFn(_f)) {

@@ -1,10 +1,17 @@
-
-function nombre (n)
-  if n == 0 then return "cero"
-  elseif n == 1 then return "uno"
-  elseif n == 2 then return "dos"
-  else return "otro" end
+local bottles = 10
+ 
+local function plural (bottles) if bottles == 1 then return '' end return 's' end
+while bottles > 0 do
+  print (bottles..' bottle'..plural(bottles)..' of beer on the wall')
+  print (bottles..' bottle'..plural(bottles)..' of beer')
+  print ('Take one down, pass it around')
+  bottles = bottles - 1
+  print (bottles..' bottle'..plural(bottles)..' of beer on the wall')
+  print ()
 end
 
-print(nombre(1))
-print(nombre(3))
+print("start")
+goto skip
+print("middle")
+::skip::
+print("end")

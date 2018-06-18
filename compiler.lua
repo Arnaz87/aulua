@@ -122,6 +122,14 @@ end
 function _f:call (...)
   return self:inst(table.pack(...))
 end
+function _f:push_scope ()
+  self.locals = {}
+  table.insert(self.scopes, self.locals)
+end
+function _f:pop_scope ()
+  self.locals = self.scopes[#self.scopes]
+  table.remove(self.scopes)
+end
 function code (name)
   local f = {
     _id=#funcs,
@@ -130,13 +138,17 @@ function code (name)
     code={},
     label_count=0,
     labels={},
+    label_names={},
     ins={},
     outs={},
     locals={},
     upvals={},
+    scopes={},
+    loops={},
   }
   setmetatable(f, _f)
   table.insert(funcs, f)
+  table.insert(f.scopes, f.locals)
   return f
 end
 function _f:__tostring ()
@@ -215,6 +227,10 @@ binops = {
   [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
   ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
   ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),
+  ["<"] = lua_m:func("lt", {any_t,any_t}, {any_t}),
+  [">"] = lua_m:func("gt", {any_t,any_t}, {any_t}),
+  ["<="] = lua_m:func("le", {any_t,any_t}, {any_t}),
+  [">="] = lua_m:func("ge", {any_t,any_t}, {any_t}),
 }
 
 --------------------------------------------------------------------------------
@@ -313,7 +329,12 @@ function _f:build_upvals ()
 end
 
 function _f:get_local (name, as_upval)
-  local lcl = self.locals[name]
+  local lcl
+  for i = #self.scopes, 1, -1 do
+    lcl = self.scopes[i][name]
+    if lcl then break end
+  end
+
   if lcl then
     if as_upval and not lcl.is_upval then
       local id = #self.upvals
@@ -600,6 +621,61 @@ function _f:compileStmt (node)
       self:compileBlock(node.els)
     end
     self:inst{"label", if_end}
+  elseif tp == "do" then
+    self:push_scope()
+    self:compileBlock(node.body)
+    self:pop_scope()
+  elseif tp == "if" then
+    self:push_scope()
+    local if_end = self:lbl()
+    for _, clause in ipairs(node.clauses) do
+      local clause_end = self:lbl()
+      local cond = self:compileExpr(clause.cond)
+      self:inst{"nif", clause_end, cond}
+      self:compileBlock(clause.body)
+      self:inst{"jmp", if_end}
+      self:inst{"label", clause_end}
+    end
+    if node.els then
+      self:compileBlock(node.els)
+    end
+    self:inst{"label", if_end}
+    self:pop_scope()
+  elseif tp == "while" then
+    self:push_scope()
+    local start = self:lbl()
+    local endl = self:lbl()
+    table.insert(self.loops, endl)
+    
+    self:inst{"label", start} 
+    local cond = self:compileExpr(node.cond)
+    self:inst{"nif", endl, cond}
+    self:compileBlock(node.body)
+    self:inst{"jmp", start}
+    self:inst{"label", endl}
+
+    table.remove(self.loops)
+    self:pop_scope()
+  elseif tp == "repeat" then
+    self:push_scope()
+    local start = self:lbl()
+    local endl = self:lbl()
+    table.insert(self.loops, endl)
+
+    self:inst{"label", start} 
+    self:compileBlock(clause.body)
+    local cond = self:compileExpr(clause.cond)
+    self:inst{"jif", start, cond}
+    self:inst{"label", endl}
+
+    table.remove(self.loops)
+    self:pop_scope()
+  elseif tp == "break" then
+    self:inst{"jmp", self.loops[#self.loops]}
+  elseif tp == "label" then
+    self:inst{"label", self.name}
+  elseif tp == "goto" then
+    self:inst{"jmp", self.name}
   else err("statement not supported: " .. tp, node) end
 end
 
