@@ -99,6 +99,8 @@ function module (name)
   return m
 end
 
+local scope_count = 0
+
 local _f = {}
 _f.__index = _f
 function _f:id () return self._id end
@@ -120,15 +122,16 @@ function _f:lbl ()
   return l
 end
 function _f:call (...)
-  return self:inst(table.pack(...))
+  return self:inst{...}
 end
 function _f:push_scope ()
-  self.locals = {}
-  table.insert(self.scopes, self.locals)
+  self.scope = { locals={}, labels={}, id=scope_count }
+  table.insert(self.scopes, self.scope)
+  scope_count = scope_count+1
 end
 function _f:pop_scope ()
-  self.locals = self.scopes[#self.scopes]
   table.remove(self.scopes)
+  self.scope = self.scopes[#self.scopes]
 end
 function code (name)
   local f = {
@@ -138,17 +141,15 @@ function code (name)
     code={},
     label_count=0,
     labels={},
-    label_names={},
     ins={},
     outs={},
-    locals={},
     upvals={},
     scopes={},
     loops={},
   }
   setmetatable(f, _f)
   table.insert(funcs, f)
-  table.insert(f.scopes, f.locals)
+  f:push_scope()
   return f
 end
 function _f:__tostring ()
@@ -331,7 +332,7 @@ end
 function _f:get_local (name, as_upval)
   local lcl
   for i = #self.scopes, 1, -1 do
-    lcl = self.scopes[i][name]
+    lcl = self.scopes[i].locals[name]
     if lcl then break end
   end
 
@@ -381,7 +382,7 @@ function _f:createFunction (node)
 
   -- The first two registers are the two function arguments
   local vararg = {reg=0}
-  fn.locals["..."] = vararg
+  fn.vararg = vararg
   fn.upval_arg = {reg=1}
 
   fn:create_upval_info()
@@ -392,7 +393,7 @@ function _f:createFunction (node)
 
   for _, argname in ipairs(node.names) do
     local arg = fn:inst{next_f, vararg}
-    fn.locals[argname] = fn:inst{"local", arg}
+    fn.scope.locals[argname] = fn:inst{"local", arg}
   end
 
   fn:compileBlock(node.body)
@@ -536,7 +537,7 @@ function _f:assign (vars, values)
 
     if var then
       if var.lcl then
-        self.locals[var.lcl] = self:inst{"local", reg}
+        self.scope.locals[var.lcl] = self:inst{"local", reg}
       elseif var.base then
         self:call(set_f, var.base, var.key, reg)
       else
@@ -607,60 +608,53 @@ function _f:compileStmt (node)
     self:assign({self:compileLhs(node.lhs)}, {node.body})
   elseif tp == "localfunc" then
     self:assign({{lcl=node.name}}, {node.body})
-  elseif tp == "if" then
-    local if_end = self:lbl()
-    for _, clause in ipairs(node.clauses) do
-      local clause_end = self:lbl()
-      local cond = self:compileExpr(clause.cond)
-      self:inst{"nif", clause_end, cond}
-      self:compileBlock(clause.body)
-      self:inst{"jmp", if_end}
-      self:inst{"label", clause_end}
-    end
-    if node.els then
-      self:compileBlock(node.els)
-    end
-    self:inst{"label", if_end}
   elseif tp == "do" then
     self:push_scope()
     self:compileBlock(node.body)
     self:pop_scope()
   elseif tp == "if" then
-    self:push_scope()
     local if_end = self:lbl()
     for _, clause in ipairs(node.clauses) do
       local clause_end = self:lbl()
       local cond = self:compileExpr(clause.cond)
       self:inst{"nif", clause_end, cond}
+
+      self:push_scope()
       self:compileBlock(clause.body)
+      self:pop_scope()
+
       self:inst{"jmp", if_end}
       self:inst{"label", clause_end}
     end
     if node.els then
+      self:push_scope()
       self:compileBlock(node.els)
+      self:pop_scope()
     end
     self:inst{"label", if_end}
-    self:pop_scope()
   elseif tp == "while" then
-    self:push_scope()
     local start = self:lbl()
     local endl = self:lbl()
-    table.insert(self.loops, endl)
     
     self:inst{"label", start} 
     local cond = self:compileExpr(node.cond)
     self:inst{"nif", endl, cond}
+    
+    table.insert(self.loops, endl)
+    self:push_scope()
     self:compileBlock(node.body)
+    self:pop_scope()
+    table.remove(self.loops)
+
     self:inst{"jmp", start}
     self:inst{"label", endl}
 
-    table.remove(self.loops)
-    self:pop_scope()
   elseif tp == "repeat" then
-    self:push_scope()
     local start = self:lbl()
     local endl = self:lbl()
+
     table.insert(self.loops, endl)
+    self:push_scope()
 
     self:inst{"label", start} 
     self:compileBlock(clause.body)
@@ -668,14 +662,21 @@ function _f:compileStmt (node)
     self:inst{"jif", start, cond}
     self:inst{"label", endl}
 
-    table.remove(self.loops)
     self:pop_scope()
+    table.remove(self.loops)
   elseif tp == "break" then
     self:inst{"jmp", self.loops[#self.loops]}
   elseif tp == "label" then
-    self:inst{"label", self.name}
+    self:inst{"label", node.name}
   elseif tp == "goto" then
-    self:inst{"jmp", self.name}
+    -- TODO: Lua label restrictions:
+    -- * only jump to labels in current or outer blocks
+    --     (no visible label 'label-name' for <goto> at line N)
+    -- * locals cannot be declared between a forward goto and it's label
+    --     (<goto label-name> at line N jumps into the scope of local 'x')
+    -- * labels are per block, not per function like currently
+    -- Currently, the VM will crash on certain cases of the second restriction
+    self:inst{"jmp", node.name, line=node.line}
   else err("statement not supported: " .. tp, node) end
 end
 
@@ -759,8 +760,8 @@ do -- main function
   lua_main.level = 1
 
   lua_main:create_upval_info()
-  lua_main.locals["_ENV"] = lua_main:inst{"local", {reg=0}}
-  lua_main.locals["..."] = lua_main:inst{stack_f}
+  lua_main.scope.locals["_ENV"] = lua_main:inst{"local", {reg=0}}
+  lua_main.vararg = lua_main:inst{stack_f}
 
   lua_main:compileBlock(ast)
   if #ast == 0 or ast[#ast].type ~= "return" then
@@ -894,6 +895,14 @@ function write_code (fn)
 
   local regs = #fn.regs
 
+  local function getlbl (name, line)
+    local lbl = fn.labels[name]
+    if not lbl then
+      error("no visible label '" .. name .. "' for <goto> at line " .. line)
+    end
+    return lbl
+  end
+
   wint(#fn.code)
   for i, inst in ipairs(fn.code) do
     local f = inst[1]
@@ -915,14 +924,14 @@ function write_code (fn)
       wint(inst[3].reg)
     elseif f == "jmp" then
       wbyte(5)
-      wint(fn.labels[inst[2]])
+      wint(getlbl(inst[2], inst.line))
     elseif f == "jif" then
       wbyte(6)
-      wint(fn.labels[inst[2]])
+      wint(getlbl(inst[2]))
       wint(inst[3].reg)
     elseif f == "nif" then
       wbyte(7)
-      wint(fn.labels[inst[2]])
+      wint(getlbl(inst[2]))
       wint(inst[3].reg)
     elseif type(f) == "table" then
       -- Function call

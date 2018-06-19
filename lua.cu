@@ -145,8 +145,8 @@ bool isSpace (int code) {
 
 int, bool parseNum (string str) {
   // TODO:
-  // Actually parse numbers like lua does. Only whitespace is allowed before
-  // or after the number, and it can be in any format lua accepts (integer,
+  // Actually parse numbers like lua does. Whitespace is allowed before and
+  // after the number, and it can be in any format lua accepts (integer,
   // decimal, scientific notation, hexadecimal and hexadecimal scientific)
   int value = 0;
   int pos = 0;
@@ -274,6 +274,7 @@ bool equals (any a, any b) {
     bool _a = getBool(a), _b = getBool(b);
     return (_a && _b) || (!_a && !_b);
   }
+  if (testNil(a) && testNil(b)) return true;
   /*if (testTable(a) && testTable(b)) {
     Table ta = getTable(a);
     Table tb = getTable(b);
@@ -331,6 +332,7 @@ import cobre.array (Pair) {
 
 struct Table {
   PairArr arr;
+  MetaTable? meta;
 
   any get (Table this, any key) {
     checkKey(key);
@@ -351,7 +353,9 @@ struct Table {
   }
 }
 
-any newTable () { return anyTable(new Table(emptyPairArr())); }
+type MetaTable (Table);
+
+any newTable () { return anyTable(new Table(emptyPairArr(), new MetaTable?())); }
 
 any get (any t, any k) {
   if (testTable(t)) return getTable(t).get(k);
@@ -384,7 +388,7 @@ Stack _print (Stack args) {
   return newStack();
 } import module newfn (_print) { Function `` () as __print; }
 
-Stack _assert (Stack args) {
+/*Stack _assert (Stack args) {
   any val = args.next();
   if (tobool(val)) {
     Stack ret = newStack();
@@ -415,17 +419,46 @@ import module newfn (_tonumber) { Function `` () as __tonumber; }
 Stack _type (Stack args) { return stackof(anyStr(typestr(args.next()))); }
 import module newfn (_type) { Function `` () as __type; }
 
+Stack _getmeta (Stack args) {
+  int v = args.next();
+  if (testNil(v)) error("Lua: bad argument #1 to 'getmetatable' (value expected)");
+  if (testTable(v)) {
+    Table t = getTable(v);
+    if (!t.meta.isnull())
+      return stackof(anyTable(t.meta.get() as Table));
+  }
+  return stackof(nil());
+}
+import module newfn (_getmeta) { Function `` () as __getmeta; }
+
+Stack _setmeta (Stack args) {
+  any a = args.next(), b = args.next();
+  if (!testTable(a)) error("Lua: bad argument #1 to 'getmetatable' (table expected, got "+typestr(a)+")");
+  if (!testTable(b)) error("Lua: bad argument #2 to 'getmetatable' (table expected, got "+typestr(b)+")");
+
+  Table t = getTable(a);
+  Table meta = getTable(b);
+  t.meta = (meta as MetaTable) as MetaTable?;
+
+  return stackof(a);
+}
+import module newfn (_setmeta) { Function `` () as __setmeta; }*/
+
 any create_global () {
-  Table tbl = new Table(emptyPairArr());
+  Table tbl = new Table(emptyPairArr(), new MetaTable?());
 
   tbl.set(anyStr("_G"), anyTable(tbl));
   tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
   tbl.set(anyStr("print"), _function(__print()));
-  tbl.set(anyStr("error"), _function(__error()));
+  /*tbl.set(anyStr("error"), _function(__error()));
   tbl.set(anyStr("assert"), _function(__assert()));
   tbl.set(anyStr("tostring"), _function(__tostring()));
   tbl.set(anyStr("tonumber"), _function(__tonumber()));
   tbl.set(anyStr("type"), _function(__type()));
+  tbl.set(anyStr("getmetatable"), _function(__getmeta()));
+  tbl.set(anyStr("setmetatable"), _function(__setmeta()));*/
+
+  //Table table_tbl = new Table(emptyPairArr(), new MetaTable?());
 
   return anyTable(tbl);
 }
