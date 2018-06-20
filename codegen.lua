@@ -1,244 +1,8 @@
 
--- Lua magic to not pollute the global namespace
-_ENV = setmetatable({}, {__index = _ENV})
+require("helpers")
+require("basics")
 
-Parser = require("parser")
-
-file = io.open("test.lua", "r")
-contents = file:read("a")
-Parser.open(contents)
-ast = Parser.parse()
-if not ast then print("Error: " .. Parser.error) os.exit(1) end
-
-function tostr (obj, level, pre)
-  level = level or 1
-  pre = pre or ""
-  if type(obj) ~= "table" or level == 0 then return tostring(obj) end
-
-  if #obj > 0 then
-    local str = "["
-    for i = 1, #obj do
-      if i > 1 then str = str .. "," end
-      str = str .. "\n" .. pre .. "  " .. tostr(obj[i], level-1, pre .. "  ")
-    end
-
-    for k, v in pairs(obj) do
-      if type(k) ~= "number" then
-        str = str .. ",\n" .. pre .. "  " .. tostring(k) .. " = " .. tostr(v, level-1, pre .. "  ")
-      end
-    end
-
-    return str .. "\n" .. pre .. "]"
-  end
-
-  local first = true
-  local str = "{"
-  for k, v in pairs(obj) do
-    if first then first = false
-    else str = str .. "," end
-    str = str .. "\n" .. pre .. "  " .. tostring(k) .. " = " .. tostr(v, level-1, pre .. "  ")
-  end
-  str = str .. "\n" .. pre .. "}"
-  if first then return "[]" end
-  return str
-end
-
-function err (msg, node)
-  if node then
-    msg = msg .. ", at " .. node.line .. ":" .. node.column
-  end
-  error(msg)
-end
-
---------------------------------------------------------------------------------
-----                                 Basics                                 ----
---------------------------------------------------------------------------------
-
-modules = {}
-types = {}
-funcs = {}
-
-local _m = {}
-function _m:type (name)
-  local t = {id=#types, name=name, module=self.id}
-  table.insert(types, t)
-  setmetatable(t, {
-    __tostring = function (f)
-      return self:fullname() .. "." .. name
-    end
-  })
-  return t
-end
-function _m:func (name, ins, outs)
-  local f = {_id=#funcs, name=name, ins={}, outs={}, module=self.id}
-  function f:id () return self._id end
-  for i, t in ipairs(ins) do f.ins[i] = t.id end
-  for i, t in ipairs(outs) do f.outs[i] = t.id end
-  table.insert(funcs, f)
-  setmetatable(f, {
-    __tostring = function (f)
-      return self:fullname() .. "." .. name
-    end
-  })
-  return f
-end
-function _m:fullname ()
-  if self.base then
-    local args = {}
-    for _, item in ipairs(self.argument.items) do
-      args[#args] = item.name .. "=" .. tostring(item.tp or item.fn or "¿?")
-    end
-    return self.base.name .. "(" .. table.concat(args, " ") .. ")"
-  else return self.name or "<unknown>" end
-end
-function module (name)
-  -- Positions 0 and 1 are reserved
-  local m = {id=#modules+2, name=name}
-  setmetatable(m, {__index = _m})
-  table.insert(modules, m)
-  return m
-end
-
-local scope_count = 0
-
-local _f = {}
-_f.__index = _f
-function _f:id () return self._id end
-function _f:reg ()
-  local r = {id=#self.regs}
-  table.insert(self.regs, r)
-  setmetatable(r, {
-    __tostring = function (slf) return "reg_" .. slf.id end
-  })
-  return r
-end
-function _f:inst (data)
-  table.insert(self.code, data)
-  return data
-end
-function _f:lbl ()
-  local l = self.label_count + 1
-  self.label_count = l
-  return l
-end
-function _f:call (...)
-  return self:inst{...}
-end
-function _f:push_scope ()
-  self.scope = { locals={}, labels={}, id=scope_count }
-  table.insert(self.scopes, self.scope)
-  scope_count = scope_count+1
-end
-function _f:pop_scope ()
-  table.remove(self.scopes)
-  self.scope = self.scopes[#self.scopes]
-end
-function code (name)
-  local f = {
-    _id=#funcs,
-    name=name,
-    regs={},
-    code={},
-    label_count=0,
-    labels={},
-    ins={},
-    outs={},
-    upvals={},
-    scopes={},
-    loops={},
-  }
-  setmetatable(f, _f)
-  table.insert(funcs, f)
-  f:push_scope()
-  return f
-end
-function _f:__tostring ()
-  return ":lua:" .. (self.name or "")
-end
-
-constants = {}
-
-function constant (tp, value)
-  local data = {_id=#constants, type=tp, value=value, ins={}, outs={0}}
-  function data:id () return self._id + #funcs end
-  table.insert(constants, data)
-  setmetatable(data, {
-    __tostring = function (self) return "cns_" .. self:id() end
-  })
-  return data
-end
-
-function constcall (f, ...)
-  local data = constant("call")
-  data.f = f
-  data.args = table.pack(...)
-  return data
-end
-
---------------------------------------------------------------------------------
-----                                Imports                                 ----
---------------------------------------------------------------------------------
-
-int_m = module("cobre\x1fint")
-bool_m = module("cobre\x1fbool")
-str_m = module("cobre\x1fstring")
-lua_m = module("lua")
-closure_m = module("closure")
-closure_m.from = lua_m
-record_m = module("cobre\x1frecord")
-any_m = module("cobre\x1fany")
-buffer_m = module("cobre\x1fbuffer")
-
-any_t = any_m:type("any")
-bool_t = bool_m:type("bool")
-bin_t = buffer_m:type("buffer")
-int_t = int_m:type("int")
-string_t = str_m:type("string")
-stack_t = lua_m:type("Stack")
-func_t = lua_m:type("Function")
-
-newstr_f = str_m:func("new", {bin_t}, {string_t})
-str_f = lua_m:func("_string", {string_t}, {any_t})
-
-int_f = lua_m:func("_int", {int_t}, {any_t})
-nil_f = lua_m:func("nil", {}, {any_t})
-true_f = lua_m:func("_true", {}, {any_t})
-false_f = lua_m:func("_false", {}, {any_t})
-bool_f = lua_m:func("tobool", {any_t}, {bool_t})
-func_f = lua_m:func("_function", {func_t}, {any_t})
-call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
-
-global_f = lua_m:func("create_global", {}, {any_t})
-
-stack_f = lua_m:func("newStack", {}, {stack_t})
-push_f = lua_m:func("push\x1dStack", {stack_t, any_t}, {})
-next_f = lua_m:func("next\x1dStack", {stack_t}, {any_t})
-getstack_f = lua_m:func("get\x1dStack", {stack_t}, {int_t})
-append_f = lua_m:func("append\x1dStack", {stack_t, stack_t}, {})
-
-table_f = lua_m:func("newTable", {}, {any_t})
-get_f = lua_m:func("get", {any_t, any_t}, {any_t})
-set_f = lua_m:func("set", {any_t, any_t, any_t}, {})
-
-binops = {
-  ["+"] = lua_m:func("add", {any_t,any_t}, {any_t}),
-  ["-"] = lua_m:func("sub", {any_t,any_t}, {any_t}),
-  ["*"] = lua_m:func("mul", {any_t,any_t}, {any_t}),
-  ["/"] = lua_m:func("div", {any_t,any_t}, {any_t}),
-  [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
-  ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
-  ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),
-  ["<"] = lua_m:func("lt", {any_t,any_t}, {any_t}),
-  [">"] = lua_m:func("gt", {any_t,any_t}, {any_t}),
-  ["<="] = lua_m:func("le", {any_t,any_t}, {any_t}),
-  [">="] = lua_m:func("ge", {any_t,any_t}, {any_t}),
-}
-
---------------------------------------------------------------------------------
-----                                Compile                                 ----
---------------------------------------------------------------------------------
-
-function _f:create_upval_info ()
+function Function:create_upval_info ()
   -- Every function has an upval type, which is a record with all the upvalues
 
   -- The upval type has to be known beforehand to pass it to children closure
@@ -284,10 +48,10 @@ function _f:create_upval_info ()
   self.upval_accessors = {}
 end
 
-function _f:build_upvals ()
+function Function:build_upvals ()
   -- Here, after compiling the code, we know which locals are used in closure
   -- functions, so we can now describe the actual contents of the upval module
-  -- and type. Check _f:create_upval_info for more information
+  -- and type. Check Function:create_upval_info for more information
 
   local argitems = self.upval_module.argument.items
 
@@ -329,7 +93,7 @@ function _f:build_upvals ()
   table.move(oldcode, 1, #oldcode, #self.code+1, self.code)
 end
 
-function _f:get_local (name, as_upval)
+function Function:get_local (name, as_upval)
   local lcl
   for i = #self.scopes, 1, -1 do
     lcl = self.scopes[i].locals[name]
@@ -362,7 +126,7 @@ function _f:get_local (name, as_upval)
   end
 end
 
-function _f:get_level_ancestor (level)
+function Function:get_level_ancestor (level)
   while self do
     if self.level == level then
       return self
@@ -372,7 +136,7 @@ function _f:get_level_ancestor (level)
   error("Could not find ancestor of level " .. level)
 end
 
-function _f:createFunction (node)
+function Function:createFunction (node)
   local fn = code("function")
   fn.node = node
   fn.parent = self
@@ -424,7 +188,7 @@ function _f:createFunction (node)
   return self:call(func_f, raw)
 end
 
-function _f:compileCall (node)
+function Function:compileCall (node)
   local base = self:compileExpr(node.base)
   local f_reg = base
   if node.key then
@@ -451,7 +215,7 @@ function _f:compileCall (node)
   return self:call(call_f, f_reg, args)
 end
 
-function _f:compileExpr (node)
+function Function:compileExpr (node)
   local tp = node.type
   if tp == "const" then
     local f
@@ -518,7 +282,7 @@ function _f:compileExpr (node)
   else err("expression " .. tp .. " not supported", node) end
 end
 
-function _f:assign (vars, values)
+function Function:assign (vars, values)
   local last = math.max(#vars, #values)
   local stack
 
@@ -557,7 +321,7 @@ function _f:assign (vars, values)
   end
 end
 
-function _f:compileLhs (node)
+function Function:compileLhs (node)
   if node.type == "var" then return node.name
   elseif node.type == "index" then
     return {
@@ -572,7 +336,7 @@ function _f:compileLhs (node)
   else error("wtf") end
 end
 
-function _f:compileStmt (node)
+function Function:compileStmt (node)
   local tp = node.type
   if tp == "local" then
     local vars = {}
@@ -580,7 +344,7 @@ function _f:compileStmt (node)
       vars[i] = {lcl=name}
     end
     self:assign(vars, node.values)
-  elseif tp == "call" then self:compileExpr(node)
+  elseif tp == "call" then self:compileCall(node)
   elseif tp == "assignment" then
     local vars = {}
     for i, var in ipairs(node.lhs) do
@@ -680,13 +444,13 @@ function _f:compileStmt (node)
   else err("statement not supported: " .. tp, node) end
 end
 
-function _f:compileBlock (nodes)
+function Function:compileBlock (nodes)
   for i, node in ipairs(nodes) do
     self:compileStmt(node)
   end
 end
 
-function _f:transform ()
+function Function:transform ()
   local oldcode = self.code
   self.code = {}
   self.labels = {}
@@ -753,7 +517,7 @@ function _f:transform ()
   end
 end
 
-do -- main function
+return function (ast)
   lua_main = code("lua_main")
   lua_main.ins = {any_t.id}
   lua_main.outs = {stack_t.id}
@@ -778,178 +542,3 @@ do -- main function
   main:inst{"end"}
 end
 
---print(tostr(lua_main.code, 3))
-
---------------------------------------------------------------------------------
-----                                Writing                                 ----
---------------------------------------------------------------------------------
-
--- [[
-
-outfile = io.open("out", "wb")
-
-
-function wbyte (...)
-  outfile:write(string.char(...))
-end
-
-function wint (n)
-  function f (n)
-    if n > 0 then
-      f(n >> 7)
-      wbyte((n & 0x7f) | 0x80)
-    end
-  end
-  f(n >> 7)
-  wbyte(n & 0x7f)
-end
-
-function wstr (str)
-  wint(#str)
-  outfile:write(str)
-end
-
-outfile:write("Cobre 0.6\0")
-wint(#modules+1) -- Count the export module, but not the argument module
-wbyte(2, 2) -- Export module is a module definition with 2 items
-
-wbyte(2) -- First item
-wint(lua_main:id())
-wstr("lua_main")
-
-wbyte(2) -- First item
-wint(main:id())
-wstr("main")
-
-for _, mod in ipairs(modules) do
-  if mod.items then
-    wbyte(2) -- define
-    wint(#mod.items)
-    for _, item in ipairs(mod.items) do
-      if item.fn then
-        wbyte(2)
-        wint(item.fn:id())
-      elseif item.tp then
-        wbyte(1)
-        wint(item.tp.id)
-      else err("Unknown item kind for " .. tostr(item)) end
-      wstr(item.name)
-    end
-  elseif mod.base and mod.argument then
-    wbyte(4)-- build
-    wint(mod.base.id)
-    wint(mod.argument.id)
-  elseif mod.from then
-    wbyte(3) -- use
-    wint(mod.from.id)
-    wstr(mod.name)
-  else -- import by default
-    wbyte(1)
-    wstr(mod.name)
-  end
-end
-
-wint(#types)
-for i, tp in ipairs(types) do
-  wint(tp.module + 1)
-  wstr(tp.name)
-end
-
-wint(#funcs)
-for _, fn in ipairs(funcs) do
-  if fn.code then
-    wbyte(1)
-  elseif fn.module then
-    wint(fn.module + 2)
-  else error("???") end
-  wint(#fn.ins)
-  for _, t in ipairs(fn.ins) do wint(t) end
-  wint(#fn.outs)
-  for _, t in ipairs(fn.outs) do wint(t) end
-  if fn.module then wstr(fn.name) end
-end
-
-wint(#constants)
-for i, cns in ipairs(constants) do
-  if cns.type == "int" then
-    wbyte(1)
-    wint(cns.value)
-  elseif cns.type == "bin" then
-    wbyte(2)
-    wstr(cns.value)
-  elseif cns.type == "call" then
-    if #cns.args ~= #cns.f.ins then
-      error(cns.f.name .. " expects " .. #cns.f.ins .. " arguments, but got " .. #cns.args)
-    end
-    wint(cns.f:id() + 16)
-    for i, v in ipairs(cns.args) do
-      wint(v:id())
-    end
-  else error("constant " .. cns.type .. " not supported") end
-end
-
-function write_code (fn)
-
-  local newcode = {}
-  local regcount = 0
-
-  local regs = #fn.regs
-
-  local function getlbl (name, line)
-    local lbl = fn.labels[name]
-    if not lbl then
-      error("no visible label '" .. name .. "' for <goto> at line " .. line)
-    end
-    return lbl
-  end
-
-  wint(#fn.code)
-  for i, inst in ipairs(fn.code) do
-    local f = inst[1]
-    if f == "end" then
-      if #inst-1 ~= #fn.outs then
-        error(fn.name .. " outputs " .. #fn.outs .. " results, but end instrucion has " .. #inst-1)
-      end
-      wbyte(0)
-      for i=2, #inst do
-        wint(inst[i].reg)
-      end
-    elseif f == "dup" then
-      wbyte(3)
-      wint(inst[2].reg)
-      inst.reg, regs = regs, regs+1
-    elseif f == "set" then
-      wbyte(4)
-      wint(inst[2].reg)
-      wint(inst[3].reg)
-    elseif f == "jmp" then
-      wbyte(5)
-      wint(getlbl(inst[2], inst.line))
-    elseif f == "jif" then
-      wbyte(6)
-      wint(getlbl(inst[2]))
-      wint(inst[3].reg)
-    elseif f == "nif" then
-      wbyte(7)
-      wint(getlbl(inst[2]))
-      wint(inst[3].reg)
-    elseif type(f) == "table" then
-      -- Function call
-      wint(f:id() + 16)
-      for i = 2, #inst do
-        wint(inst[i].reg)
-      end
-    else error("Unsupported instruction: " .. f) end
-  end
-end
-
--- Code
-for _, fn in ipairs(funcs) do
-  if fn.code then write_code(fn) end
-end
-
-wbyte(0) -- metadata
-
---print(tostr(funcs))
-
--- ]]

@@ -2,7 +2,7 @@
 -- Lua magic to not pollute the global namespace
 _ENV = setmetatable({}, {__index = _ENV})
 
-Lexer = require("lexer")
+Lexer = require("parser/lexer")
 
 Parser = {}
 
