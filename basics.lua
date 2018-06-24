@@ -105,7 +105,7 @@ end
 
 constants = {}
 
-function constant (tp, value)
+function raw_const (tp, value)
   local data = {_id=#constants, type=tp, value=value, ins={}, outs={0}}
   function data:id () return self._id + #funcs end
   table.insert(constants, data)
@@ -115,11 +115,27 @@ function constant (tp, value)
   return data
 end
 
-function constcall (f, ...)
-  local data = constant("call")
+function const_call (f, ...)
+  local data = raw_const("call")
   data.f = f
   data.args = table.pack(...)
   return data
+end
+
+constant_cache = {}
+function constant (value)
+  local cns = constant_cache[value]
+  if cns then return cns end
+  if type(value) == "string" then
+    local raw = raw_const("bin", value)
+    local str = const_call(rawstr_f, raw)
+    cns = const_call(anystr_f, str)
+  elseif type(value) == "number" then
+    local raw = raw_const("int", value)
+    cns = const_call(anyint_f, raw)
+  end
+  constant_cache[value] = cns
+  return cns
 end
 
 int_m = module("cobre\x1fint")
@@ -140,15 +156,15 @@ string_t = str_m:type("string")
 stack_t = lua_m:type("Stack")
 func_t = lua_m:type("Function")
 
-newstr_f = str_m:func("new", {bin_t}, {string_t})
-str_f = lua_m:func("_string", {string_t}, {any_t})
+rawstr_f = str_m:func("new", {bin_t}, {string_t})
+anyint_f = lua_m:func("int", {int_t}, {any_t})
+anystr_f = lua_m:func("string", {string_t}, {any_t})
 
-int_f = lua_m:func("_int", {int_t}, {any_t})
 nil_f = lua_m:func("nil", {}, {any_t})
-true_f = lua_m:func("_true", {}, {any_t})
-false_f = lua_m:func("_false", {}, {any_t})
+true_f = lua_m:func("true", {}, {any_t})
+false_f = lua_m:func("false", {}, {any_t})
 bool_f = lua_m:func("tobool", {any_t}, {bool_t})
-func_f = lua_m:func("_function", {func_t}, {any_t})
+func_f = lua_m:func("function", {func_t}, {any_t})
 call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
 global_f = lua_m:func("create_global", {}, {any_t})

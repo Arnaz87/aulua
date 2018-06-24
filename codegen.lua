@@ -225,14 +225,10 @@ function Function:compileExpr (node)
     end
     return self:inst{f}
   elseif tp == "num" then
-    local n = tonumber(node.value)
-    local raw = constant("int", n)
-    local cns = constcall(int_f, raw)
+    local cns = constant(tonumber(node.value))
     return self:inst{cns}
   elseif tp == "str" then
-    local raw = constant("bin", node.value)
-    local str = constcall(newstr_f, raw)
-    local cns = constcall(str_f, str)
+    local cns = constant(node.value)
     return self:inst{cns}
   elseif tp == "var" then
     local lcl = self:get_local(node.name)

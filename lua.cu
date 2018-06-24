@@ -233,12 +233,12 @@ any concat (any a, any b) {
 
 // TODO: Real nil, not just 0
 any nil () { return anyNil(new unit_t(true) as nil_t); }
+any `true` () { return anyBool(true); }
+any `false` () { return anyBool(false); }
 
-any _int (int n) { return anyInt(n); }
-any _true () { return anyBool(true); }
-any _false () { return anyBool(false); }
-any _string (string s) { return anyStr(s); }
-any _function (Function s) { return anyFn(s); }
+export anyStr as string;
+export anyInt as int;
+export anyFn as function;
 
 string typestr (any a) {
   if (testTable(a)) return "table";
@@ -388,7 +388,7 @@ Stack _print (Stack args) {
   return newStack();
 } import module newfn (_print) { Function `` () as __print; }
 
-/*Stack _assert (Stack args) {
+Stack _assert (Stack args) {
   any val = args.next();
   if (tobool(val)) {
     Stack ret = newStack();
@@ -442,21 +442,22 @@ Stack _setmeta (Stack args) {
 
   return stackof(a);
 }
-import module newfn (_setmeta) { Function `` () as __setmeta; }*/
+import module newfn (_setmeta) { Function `` () as __setmeta; }
 
 any create_global () {
   Table tbl = new Table(emptyPairArr(), new MetaTable?());
 
   tbl.set(anyStr("_G"), anyTable(tbl));
   tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
-  tbl.set(anyStr("print"), _function(__print()));
-  /*tbl.set(anyStr("error"), _function(__error()));
   tbl.set(anyStr("assert"), _function(__assert()));
+  tbl.set(anyStr("error"), _function(__error()));
+  tbl.set(anyStr("getmetatable"), _function(__getmeta()));
+  tbl.set(anyStr("print"), _function(__print()));
+  // rawequal, rawget, rawlen, rawset
+  tbl.set(anyStr("setmetatable"), _function(__setmeta()));
   tbl.set(anyStr("tostring"), _function(__tostring()));
   tbl.set(anyStr("tonumber"), _function(__tonumber()));
   tbl.set(anyStr("type"), _function(__type()));
-  tbl.set(anyStr("getmetatable"), _function(__getmeta()));
-  tbl.set(anyStr("setmetatable"), _function(__setmeta()));*/
 
   //Table table_tbl = new Table(emptyPairArr(), new MetaTable?());
 
