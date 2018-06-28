@@ -1,4 +1,4 @@
-local Lexer = require("lexer")
+local Lexer = require("lua_parser.lexer")
 
 local loud = false
 
@@ -25,7 +25,7 @@ local function test (str, ...)
   Lexer.open(str)
   local fail = false
   local msg = ""
-  local toks = table.pack(...)
+  local toks = {...}
   
   local i = 1
   local tk  = Lexer.next()

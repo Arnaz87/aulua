@@ -1,5 +1,5 @@
 
-local Parser = require("parser")
+local Parser = require("lua_parser.parser")
 
 
 local function tostr (obj)
@@ -68,7 +68,7 @@ end
 local loud = false
 local showtrace = false
 
-for line in io.lines("test_parse.txt") do
+for line in io.lines("lua_parser/test_parse.txt") do
   if line:find("LOUD") ~= nil then loud = true end
   if line:find("QUIT") ~= nil then break end
 

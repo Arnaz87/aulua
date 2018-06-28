@@ -1,5 +1,5 @@
 
-Parser = require("parser/parser")
+Parser = require("lua_parser.parser")
 
 file = io.open("test.lua", "r")
 contents = file:read("a")

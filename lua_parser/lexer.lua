@@ -72,7 +72,7 @@ local KEYWORDS = [[
   | local nil not or repeat return then true until while |
 ]]
 
--- These operators have to respect the order:
+-- These operators have to respect their relative order:
 -- // /
 -- ... .. .
 -- << <= <
