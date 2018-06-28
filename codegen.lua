@@ -214,7 +214,7 @@ function Function:compile_require (node)
   return self:inst{fn, env}
 end
 
-function Function:compileCall (node)
+function Function:compile_call (node)
   local req = self:compile_require(node)
   if req then return req end
 
@@ -233,7 +233,7 @@ function Function:compileCall (node)
     -- If the last argument is a function call,
     -- append its result stack to the argument
     if i == #node.values and v.type == "call" then
-      local result = self:compileCall(v)
+      local result = self:compile_call(v)
       self:call(append_f, args, result)
     else
       local arg = self:compileExpr(v)
@@ -321,7 +321,7 @@ function Function:compileExpr (node)
     end
     return table
   elseif tp == "call" then
-    local result = self:compileCall(node)
+    local result = self:compile_call(node)
     return self:call(next_f, result)
   else err("expression " .. tp .. " not supported", node) end
 end
@@ -334,7 +334,7 @@ function Function:assign (vars, values)
     local var, value, reg = vars[i], values[i]
 
     if i == #values and value.type == "call" then
-      stack = self:compileCall(value)
+      stack = self:compile_call(value)
     end
 
     if stack then
@@ -431,6 +431,44 @@ function Function:compile_numfor (node)
   table.remove(self.loops)
 end
 
+function Function:compile_genfor (node)
+  local start = self:lbl()
+  local endl = self:lbl()
+
+  table.insert(self.loops, endl)
+  self:push_scope()
+
+  self:assign({
+    {lcl=".f"}, {lcl=".s"}, {lcl=".var"}
+  }, node.values)
+
+  local next = self.scope.locals[".f"]
+  local state = self.scope.locals[".s"]
+  local var = self.scope.locals[".var"]
+
+  self:inst{"label", start}
+
+  local args = self:inst{stack_f}
+  self:inst{push_f, args, state}
+  self:inst{push_f, args, var}
+  local results = self:inst{call_f, next, args}
+
+  for i, name in ipairs(node.names) do
+    local value = self:inst{next_f, results}
+    self.scope.locals[name] = self:inst{"local", value}
+    if i == 1 then self:inst{"set", var, value} end
+  end
+
+  local cond = self:inst{binops["=="], var, self:inst{nil_f}}
+  self:inst{"jif", endl, cond}
+  self:compileBlock(node.body)
+  self:inst{"jmp", start}
+
+  self:inst{"label", endl}
+  self:pop_scope()
+  table.remove(self.loops)
+end
+
 function Function:compileStmt (node)
   local tp = node.type
   if tp == "local" then
@@ -439,7 +477,7 @@ function Function:compileStmt (node)
       vars[i] = {lcl=name}
     end
     self:assign(vars, node.values)
-  elseif tp == "call" then self:compileCall(node)
+  elseif tp == "call" then self:compile_call(node)
   elseif tp == "assignment" then
     local vars = {}
     for i, var in ipairs(node.lhs) do
@@ -451,7 +489,7 @@ function Function:compileStmt (node)
     local stack = self:call(stack_f)
     for i, v in ipairs(node.values) do
       if i == #node.values and v.type == "call" then
-        local result = self:compileCall(v)
+        local result = self:compile_call(v)
         self:call(append_f, stack, result)
       else
         local arg = self:compileExpr(v)
@@ -525,6 +563,8 @@ function Function:compileStmt (node)
     table.remove(self.loops)
   elseif tp == "numfor" then
     self:compile_numfor(node)
+  elseif tp == "genfor" then
+    self:compile_genfor(node)
   elseif tp == "break" then
     self:inst{"jmp", self.loops[#self.loops]}
   elseif tp == "label" then
@@ -568,7 +608,7 @@ function Function:transform ()
         local setter = self.upval_accessors[inst.upval_id].setter
         self:inst{setter, reg, arg}
       elseif arg[1] == "var" and not arg.is_upval then
-        self:inst{"dup", arg[1]}
+        self:inst{"dup", arg}
         inst.reg = reginc()
       elseif arg.reg then
         inst.reg = arg.reg

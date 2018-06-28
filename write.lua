@@ -120,6 +120,7 @@ return function (file)
 
     wint(#fn.code)
     for i, inst in ipairs(fn.code) do
+      --print(tostr(inst,1))
       local f = inst[1]
       if f == "end" then
         if #inst-1 ~= #fn.outs then
