@@ -61,6 +61,12 @@ function Function:reg ()
   return r
 end
 function Function:inst (data)
+  setmetatable(data, {
+    __tostring = function (self)
+    if self.reg then return "reg_" .. self.reg
+      else return tostring(self.inst) end
+    end
+  })
   table.insert(self.code, data)
   return data
 end

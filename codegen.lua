@@ -380,6 +380,57 @@ function Function:compileLhs (node)
   else error("wtf") end
 end
 
+function Function:compile_numfor (node)
+  -- TODO: Check that variables are numbers
+  local start = self:lbl()
+  local endl = self:lbl()
+  local body = self:lbl()
+
+  table.insert(self.loops, endl)
+  self:push_scope()
+
+  local var = self:inst{"local", self:compileExpr(node.init)}
+  local limit = self:inst{"local", self:compileExpr(node.limit)}
+  local step
+  if node.step then
+    step = self:compileExpr(node.step)
+  else
+    step = self:compileExpr{type="num", value="1"}
+  end
+  local step = self:inst{"local", step}
+
+  self.scope.locals[node.name] = var
+
+  local is_neg = self:inst{binops["<"], step, self:compileExpr{type="num", value="0"}}
+
+  self:inst{"label", start}
+
+  -- Jump to negative condition if step is negative
+  local neg_lbl = self:lbl()
+  self:inst{"jif", neg_lbl, is_neg}
+
+  local cond = self:inst{binops[">"], var, limit}
+  self:inst{"jif", endl, cond}
+  self:inst{"jmp", body}
+
+  -- Condition if step is negative
+  self:inst{"label", neg_lbl}
+  cond = self:inst{binops["<"], var, limit}
+  self:inst{"jif", endl, cond}
+
+  self:inst{"label", body}
+  self:compileBlock(node.body)
+
+  -- Increment var by step and repeat
+  local inc = self:inst{binops["+"], var, step}
+  self:inst{"set", var, inc}
+  self:inst{"jmp", start}
+  self:inst{"label", endl}
+
+  self:pop_scope()
+  table.remove(self.loops)
+end
+
 function Function:compileStmt (node)
   local tp = node.type
   if tp == "local" then
@@ -472,6 +523,8 @@ function Function:compileStmt (node)
 
     self:pop_scope()
     table.remove(self.loops)
+  elseif tp == "numfor" then
+    self:compile_numfor(node)
   elseif tp == "break" then
     self:inst{"jmp", self.loops[#self.loops]}
   elseif tp == "label" then

@@ -1,5 +1,5 @@
-function f (x) print(x) return x end
-print(f(nil) or not f(6))
+
+for i = 10, 1, -2 do print(i) end
 
 --[[local lol = require("lol")
 print("from test.lua: " .. lol)
