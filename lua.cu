@@ -79,6 +79,12 @@ struct Stack {
   int pos;
   AnyArr arr;
 
+  any first (Stack this) {
+    if (this.more())
+      return this.arr[this.pos];
+    else return nil();
+  }
+
   any next (Stack this) {
     if (this.more()) {
       any a = this.arr[this.pos];
@@ -103,12 +109,7 @@ struct Stack {
     }
   }
 
-  any get (Stack this, int i) {
-    int j = i + this.pos;
-    if (j <= this.arr.len())
-      return this.arr[j];
-    else return nil();
-  }
+  Stack copy (Stack this) { return new Stack(this.pos, this.arr); }
 }
 
 Stack newStack () {

@@ -93,6 +93,11 @@ function Function:build_upvals ()
   table.move(oldcode, 1, #oldcode, #self.code+1, self.code)
 end
 
+function Function:get_vararg ()
+  if self.vararg then return self.vararg
+  else error("cannot use '...' outside a vararg function") end
+end
+
 function Function:get_local (name, as_upval)
   local lcl
   for i = #self.scopes, 1, -1 do
@@ -145,8 +150,8 @@ function Function:createFunction (node)
   fn.outs = {stack_t.id}
 
   -- The first two registers are the two function arguments
-  local vararg = {reg=0}
-  fn.vararg = vararg
+  local args = {reg=0}
+  if node.vararg then fn.vararg = args end
   fn.upval_arg = {reg=1}
 
   fn:create_upval_info()
@@ -156,7 +161,7 @@ function Function:createFunction (node)
   end
 
   for _, argname in ipairs(node.names) do
-    local arg = fn:inst{next_f, vararg}
+    local arg = fn:inst{next_f, args}
     fn.scope.locals[argname] = fn:inst{"local", arg}
   end
 
@@ -222,26 +227,29 @@ function Function:compile_call (node)
   local f_reg = base
   if node.key then
     local key = self:compileExpr{type="str", value=node.key}
-    f_reg = self:call(get_f, base, key)
+    f_reg = self:inst{get_f, base, key}
   end
 
   local args = self:call(stack_f)
   if node.key then
-    self:call(push_f, args, base)
+    self:inst{push_f, args, base}
   end
   for i, v in ipairs(node.values) do
     -- If the last argument is a function call,
     -- append its result stack to the argument
-    if i == #node.values and v.type == "call" then
+    local is_last = i == #node.values
+    if is_last and v.type == "call" then
       local result = self:compile_call(v)
-      self:call(append_f, args, result)
+      self:inst{append_f, args, result}
+    elseif is_last and v.type == "vararg" then
+      self:inst{append_f, args, self:get_vararg()}
     else
       local arg = self:compileExpr(v)
-      self:call(push_f, args, arg)
+      self:inst{push_f, args, arg}
     end
   end
 
-  return self:call(call_f, f_reg, args)
+  return self:inst{call_f, f_reg, args}
 end
 
 function Function:compileExpr (node)
@@ -259,6 +267,8 @@ function Function:compileExpr (node)
   elseif tp == "str" then
     local cns = constant(node.value)
     return self:inst{cns}
+  elseif tp == "vararg" then
+    return self:inst{first_f, self:get_vararg()}
   elseif tp == "var" then
     local lcl = self:get_local(node.name)
     if lcl then
@@ -322,7 +332,7 @@ function Function:compileExpr (node)
     return table
   elseif tp == "call" then
     local result = self:compile_call(node)
-    return self:call(next_f, result)
+    return self:inst{first_f, result}
   else err("expression " .. tp .. " not supported", node) end
 end
 
@@ -333,8 +343,12 @@ function Function:assign (vars, values)
   for i = 1, last do
     local var, value, reg = vars[i], values[i]
 
-    if i == #values and value.type == "call" then
-      stack = self:compile_call(value)
+    if i == #values then
+      if value.type == "call" then
+        stack = self:compile_call(value)
+      elseif value.type == "vararg" then
+        stack = self:inst{copystack_f, self:get_vararg()}
+      end
     end
 
     if stack then
@@ -665,7 +679,6 @@ return function (ast)
   -- true ENV, cannot be assigned because a lua identifier with a point is not
   -- valid. To be used when requiring
   lua_main.scope.locals[".ENV"] = lua_main:inst{"local", {reg=0}}
-  lua_main.vararg = lua_main:inst{stack_f}
 
   lua_main:compileBlock(ast)
   if #ast == 0 or ast[#ast].type ~= "return" then

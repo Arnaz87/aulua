@@ -1,16 +1,14 @@
 
-function ipairs (t)
-  local function next (t, i)
-    i = i+1
-    local v = t[i]
-    if v then return i, v end
-  end
-  return next, t, 0
+function f (...)
+  print(...)
+  local a, b = ...
+  local c, d = ...
+  print(..., a+d, b+c)
 end
 
-local t = {"a", "b", "c"}
+local x, y = ...
 
-for i, v in ipairs(t) do print(i, v) end
+f(2, 3, 4)
 
 --[[local f, s, var = ipairs(t)
 while true do
