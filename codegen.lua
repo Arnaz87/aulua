@@ -270,11 +270,30 @@ function Function:compileExpr (node)
       local key = self:compileExpr{type="str", value=node.name}
       return self:call(get_f, base, key)
     end
+  elseif tp == "unop" then
+    local f = unops[node.op]
+    local a = self:compileExpr(node.value)
+    return self:call(f, a)
   elseif tp == "binop" then
-    local f = binops[node.op]
-    local a = self:compileExpr(node.left)
-    local b = self:compileExpr(node.right)
-    return self:call(f, a, b)
+    if node.op == "and" or node.op == "or" then
+      local lbl = self:lbl()
+      local a = self:compileExpr(node.left)
+      local r = self:inst{"var", a}
+      if node.op == "or" then
+        self:inst{"jif", lbl, r}
+      else
+        self:inst{"nif", lbl, r}
+      end
+      local b = self:compileExpr(node.right)
+      self:inst{"set", r, b}
+      self:inst{"label", lbl}
+      return r
+    else
+      local f = binops[node.op]
+      local a = self:compileExpr(node.left)
+      local b = self:compileExpr(node.right)
+      return self:call(f, a, b)
+    end
   elseif tp == "index" then
     local base = self:compileExpr(node.base)
     local key = self:compileExpr(node.key)
@@ -446,8 +465,8 @@ function Function:compileStmt (node)
     self:push_scope()
 
     self:inst{"label", start} 
-    self:compileBlock(clause.body)
-    local cond = self:compileExpr(clause.cond)
+    self:compileBlock(node.body)
+    local cond = self:compileExpr(node.cond)
     self:inst{"jif", start, cond}
     self:inst{"label", endl}
 

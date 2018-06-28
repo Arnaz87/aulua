@@ -299,6 +299,14 @@ any le (any a, any b) { return anyBool(_le(a, b)); }
 any gt (any a, any b) { return anyBool(!_le(a, b)); }
 any ge (any a, any b) { return anyBool(!_lt(a, b)); }
 
+any not (any a) { return anyBool(!tobool(a)); }
+any neg (any a) {
+  int n; bool t;
+  n, t = getNum(a);
+  if (t) { return anyInt(0-n); }
+  error("Lua: attempt to perform arithmetic on a non-numeric value");
+}
+
 Stack call (any _f, Stack args) {
   if (testFn(_f)) {
     Function f = getFn(_f);
@@ -365,6 +373,11 @@ any get (any t, any k) {
 void set (any t, any k, any v) {
   if (testTable(t)) getTable(t).set(k, v);
   else error("Lua: tried to index a non-table value (" + tostr(t) + ")");
+}
+
+any length (any a) {
+  if (testStr(a)) return anyInt(strlen(getStr(a)));
+  error("Lua: attempt to get length of a " + typestr(a) + " value");
 }
 
 //======= Builtins =======//

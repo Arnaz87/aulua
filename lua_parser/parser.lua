@@ -267,7 +267,7 @@ function Parser.expr (limit)
     left = pos{
       type = "unop",
       op = next().type,
-      expr = Parser.expr(unary_priority)
+      value = Parser.expr(unary_priority)
     }
   else left = Parser.simpleexp() end
 

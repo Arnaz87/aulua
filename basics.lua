@@ -192,3 +192,9 @@ binops = {
   ["<="] = lua_m:func("le", {any_t,any_t}, {any_t}),
   [">="] = lua_m:func("ge", {any_t,any_t}, {any_t}),
 }
+
+unops = {
+  ["not"] = lua_m:func("not", {any_t}, {any_t}),
+  ["-"] = lua_m:func("neg", {any_t}, {any_t}),
+  ["#"] = lua_m:func("length", {any_t}, {any_t}),
+}
