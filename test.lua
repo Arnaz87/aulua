@@ -1,3 +1,6 @@
+local lol = require("lol")
+print("from test.lua: " .. lol)
+
 local bottles = 5
  
 local function plural (bottles) if bottles == 1 then return '' end return 's' end

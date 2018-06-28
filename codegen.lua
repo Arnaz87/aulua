@@ -188,7 +188,36 @@ function Function:createFunction (node)
   return self:call(func_f, raw)
 end
 
+function Function:compile_require (node)
+  -- Return if not a proper require
+  if node.key
+  or node.base.type ~= "var"
+  or node.base.name ~= "require"
+  or self:get_local("require")
+  then return end
+
+  if #node.values ~= 1 then
+    error("lua:" .. node.line .. ": require expects exactly one argument")
+  end
+
+  if node.values[1].type ~= "str" then
+    error("lua:" .. node.line .. ": module name can only be a string literal")
+  end
+
+  local mod = module(node.values[1].value)
+  local fn = mod:func("lua_main", {any_t}, {stack_t})
+
+  local env = self:get_local(".ENV")
+  -- TODO: the modules are being executed everytime they are required, they
+  -- should be executed once the first time and their first result should be
+  -- saved in package.loaded for subsequent uses
+  return self:inst{fn, env}
+end
+
 function Function:compileCall (node)
+  local req = self:compile_require(node)
+  if req then return req end
+
   local base = self:compileExpr(node.base)
   local f_reg = base
   if node.key then
@@ -521,6 +550,9 @@ return function (ast)
 
   lua_main:create_upval_info()
   lua_main.scope.locals["_ENV"] = lua_main:inst{"local", {reg=0}}
+  -- true ENV, cannot be assigned because a lua identifier with a point is not
+  -- valid. To be used when requiring
+  lua_main.scope.locals[".ENV"] = lua_main:inst{"local", {reg=0}}
   lua_main.vararg = lua_main:inst{stack_f}
 
   lua_main:compileBlock(ast)

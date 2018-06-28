@@ -449,15 +449,15 @@ any create_global () {
 
   tbl.set(anyStr("_G"), anyTable(tbl));
   tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
-  tbl.set(anyStr("assert"), _function(__assert()));
-  tbl.set(anyStr("error"), _function(__error()));
-  tbl.set(anyStr("getmetatable"), _function(__getmeta()));
-  tbl.set(anyStr("print"), _function(__print()));
+  tbl.set(anyStr("assert"), anyFn(__assert()));
+  tbl.set(anyStr("error"), anyFn(__error()));
+  tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));
+  tbl.set(anyStr("print"), anyFn(__print()));
   // rawequal, rawget, rawlen, rawset
-  tbl.set(anyStr("setmetatable"), _function(__setmeta()));
-  tbl.set(anyStr("tostring"), _function(__tostring()));
-  tbl.set(anyStr("tonumber"), _function(__tonumber()));
-  tbl.set(anyStr("type"), _function(__type()));
+  tbl.set(anyStr("setmetatable"), anyFn(__setmeta()));
+  tbl.set(anyStr("tostring"), anyFn(__tostring()));
+  tbl.set(anyStr("tonumber"), anyFn(__tonumber()));
+  tbl.set(anyStr("type"), anyFn(__type()));
 
   //Table table_tbl = new Table(emptyPairArr(), new MetaTable?());
 
