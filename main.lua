@@ -46,5 +46,5 @@ Parser.open(contents)
 ast = Parser.parse()
 if not ast then print("Error: " .. Parser.error) os.exit(1) end
 
-require("codegen")(ast)
+require("codegen")(ast, filename)
 require("write")(out_filename)

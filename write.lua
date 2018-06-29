@@ -164,5 +164,18 @@ return function (file)
     if fn.code then write_code(fn) end
   end
 
-  wbyte(0) -- metadata
+  function write_node (value)
+    if type(value) == "number" then
+      wint(value << 1 | 1)
+    elseif type(value) == "string" then
+      wint(#value << 2 | 2)
+      file:write(value)
+    elseif type(value) == "table" then
+      wint(#value << 2)
+      for i = 1, #value do
+        write_node(value[i])
+      end
+    else error("wtf: " .. tostring(value)) end
+  end
+  write_node(metadata)
 end

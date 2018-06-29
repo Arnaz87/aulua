@@ -148,6 +148,7 @@ function Function:createFunction (node)
   fn.level = self.level + 1
   fn.ins = {stack_t.id, self.upval_type.id}
   fn.outs = {stack_t.id}
+  fn.line = node.line
 
   -- The first two registers are the two function arguments
   local args = {reg=0}
@@ -249,7 +250,7 @@ function Function:compile_call (node)
     end
   end
 
-  return self:inst{call_f, f_reg, args}
+  return self:inst{call_f, f_reg, args, line=node.line}
 end
 
 function Function:compileExpr (node)
@@ -283,7 +284,7 @@ function Function:compileExpr (node)
   elseif tp == "unop" then
     local f = unops[node.op]
     local a = self:compileExpr(node.value)
-    return self:call(f, a)
+    return self:inst{f, a, line=node.line}
   elseif tp == "binop" then
     if node.op == "and" or node.op == "or" then
       local lbl = self:lbl()
@@ -302,7 +303,7 @@ function Function:compileExpr (node)
       local f = binops[node.op]
       local a = self:compileExpr(node.left)
       local b = self:compileExpr(node.right)
-      return self:call(f, a, b)
+      return self:inst{f, a, b, line=node.line}
     end
   elseif tp == "index" then
     local base = self:compileExpr(node.base)
@@ -310,7 +311,7 @@ function Function:compileExpr (node)
     return self:call(get_f, base, key)
   elseif tp == "field" then
     local key = {type="str", value=node.key}
-    return self:compileExpr{type="index", base=node.base, key=key}
+    return self:compileExpr{type="index", base=node.base, key=key, line=node.line}
   elseif tp == "function" then
     return self:createFunction(node)
   elseif tp == "constructor" then
@@ -336,7 +337,7 @@ function Function:compileExpr (node)
   else err("expression " .. tp .. " not supported", node) end
 end
 
-function Function:assign (vars, values)
+function Function:assign (vars, values, line)
   local last = math.max(#vars, #values)
   local stack
 
@@ -361,11 +362,11 @@ function Function:assign (vars, values)
       if var.lcl then
         self.scope.locals[var.lcl] = self:inst{"local", reg}
       elseif var.base then
-        self:call(set_f, var.base, var.key, reg)
+        self:inst{set_f, var.base, var.key, reg}
       else
         local lcl = self:get_local(var)
         if lcl then
-          self:inst{"set", lcl, reg}
+          self:inst{"set", lcl, reg, line=line}
         else
           local env = self:get_local("_ENV")
           if not env then err("local \"_ENV\" not in sight", node) end
@@ -490,14 +491,14 @@ function Function:compileStmt (node)
     for i, name in ipairs(node.names) do
       vars[i] = {lcl=name}
     end
-    self:assign(vars, node.values)
+    self:assign(vars, node.values, node.line)
   elseif tp == "call" then self:compile_call(node)
   elseif tp == "assignment" then
     local vars = {}
     for i, var in ipairs(node.lhs) do
       vars[i] = self:compileLhs(var)
     end
-    self:assign(vars, node.values)
+    self:assign(vars, node.values, node.line)
   elseif tp == "return" then
 
     local stack = self:call(stack_f)
@@ -516,7 +517,7 @@ function Function:compileStmt (node)
     if node.method then
       table.insert(node.body.names, 1, "self")
     end
-    self:assign({self:compileLhs(node.lhs)}, {node.body})
+    self:assign({self:compileLhs(node.lhs)}, {node.body}, node.line)
   elseif tp == "localfunc" then
     self:assign({{lcl=node.name}}, {node.body})
   elseif tp == "do" then
@@ -668,11 +669,27 @@ function Function:transform ()
   end
 end
 
-return function (ast)
+function Function:generate_sourcemap ()
+  local code_node = {"code"}
+  for i, inst in ipairs(self.code) do
+    if inst.line then
+      table.insert(code_node, {i, inst.line, inst.column})
+    end
+  end
+
+  local node = {"function", self:id(), code_node}
+  if self.name then table.insert(node, {"name", self.name}) end
+  if self.line then table.insert(node, {"line", self.line}) end
+
+  table.insert(sourcemap, node)
+end
+
+return function (ast, filename)
   lua_main = code("lua_main")
   lua_main.ins = {any_t.id}
   lua_main.outs = {stack_t.id}
   lua_main.level = 1
+  lua_main.line = 1
 
   lua_main:create_upval_info()
   lua_main.scope.locals["_ENV"] = lua_main:inst{"local", {reg=0}}
@@ -693,5 +710,13 @@ return function (ast)
   local global = main:inst{global_f, reg=0}
   main:inst{lua_main, global, reg=1}
   main:inst{"end"}
+
+  if filename then
+    table.insert(sourcemap, {"file", filename})
+  end
+  for _, fn in ipairs(funcs) do
+    if fn.code then fn:generate_sourcemap() end
+  end
+  table.insert(metadata, sourcemap)
 end
 

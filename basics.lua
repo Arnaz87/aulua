@@ -3,6 +3,9 @@ modules = {}
 types = {}
 funcs = {}
 
+metadata = {}
+sourcemap = {"source map"}
+
 Module = {}
 Module.__index = Module
 

@@ -1,14 +1,10 @@
 
-function f (...)
-  print(...)
-  local a, b = ...
-  local c, d = ...
-  print(..., a+d, b+c)
+function f ()
+local x = {}
+local y = x + 2
+print(y)
 end
-
-local x, y = ...
-
-f(2, 3, 4)
+f()
 
 --[[local f, s, var = ipairs(t)
 while true do
