@@ -14,6 +14,8 @@ import cobre.string {
   int length (string) as strlen;
   int codeof (char);
   char, int charat(string, int);
+  string add (string, char) as addch;
+  char newchar (int);
 }
 
 import cobre.any (int) {
@@ -381,8 +383,8 @@ any get (any a, any k) {
   Table? meta = get_metatable(a);
   if (!meta.isnull()) {
     any index = meta.get().get(anyStr("__index"));
-    if (!testTable(index)) return get(index, k);
-    if (!testFn(index)) {
+    if (testTable(index)) return get(index, k);
+    if (testFn(index)) {
       Function f = getFn(index);
       Stack args = newStack();
       args.push(a);
@@ -418,9 +420,22 @@ struct StateT {
 StateT State = new StateT(false, emptyTable(), emptyTable(), emptyTable(), emptyTable());
 
 
-//======= Builtins =======//
+//======= Core Library =======//
 
-Stack stackof (any a) {
+// Helpers
+private string simple_string (any a, string n, string fname) {
+  if (testStr(a)) return getStr(a);
+  if (testInt(a)) return itos(getInt(a));
+  error("Lua: bad argument #" + n + " to '" + fname + "' (string expected, got " + typestr(a) + ")");
+}
+private int simple_number (any a, string n, string fname) {
+  int x; bool t;
+  x, t = getNum(a);
+  if (t) return x;
+  error("Lua: bad argument #" + n + " to '" + fname + "' (number expected, got " + typestr(a) + ")");
+}
+
+private Stack stackof (any a) {
   Stack stack = newStack();
   stack.push(a);
   return stack;
@@ -494,8 +509,71 @@ Stack _setmeta (Stack args) {
 }
 import module newfn (_setmeta) { Function `` () as __setmeta; }
 
+
+//======= String functions =======//
+
+int valid_str_index (int i, int len) {
+  if (i < 0) i = len+i; else i = i-1;
+  if (i < 0) return 0; else return i;
+}
+
+Stack _strsub (Stack args) {
+  string s = simple_string(args.next(), "1", "string.sub");
+  int len = strlen(s);
+
+  int i = valid_str_index(simple_number(args.next(), "2", "string.sub"), len);
+
+  int j = len; any _j = args.next();
+  if (!testNil(_j)) j = valid_str_index(simple_number(_j, "3", "string.sub"), len);
+
+  string s2 = "";
+  while (i <= j) {
+    char ch;
+    ch, i = charat(s,i);
+    s2 = addch(s2, ch);
+  }
+
+  return stackof(anyStr(s2));
+}
+import module newfn (_strsub) { Function `` () as __strsub; }
+
+Stack _strbyte (Stack args) {
+  string s = simple_string(args.next(), "1", "string.byte");
+  int len = strlen(s);
+
+  int i = 0; any _i = args.next();
+  if (!testNil(_i)) i = valid_str_index(simple_number(_i, "2", "string.byte"), len);
+  
+  int j = i; any _j = args.next();
+  if (!testNil(_j)) j = valid_str_index(simple_number(_j, "2", "string.byte"), len);
+
+  Stack stack = newStack();
+  while (i <= j) {
+    char ch;
+    ch, i = charat(s,i);
+    stack.push(anyInt(codeof(ch)));
+  }
+  return stack;
+}
+import module newfn (_strbyte) { Function `` () as __strbyte; }
+
+Stack _strchar (Stack args) {
+  string s = "";
+  int i = 1;
+  while (args.more()) {
+    int code = simple_number(args.next(), itos(i), "string.char");
+    s = addch(s, newchar(code));
+    i = i+1;
+  }
+  return stackof(anyStr(s));
+}
+import module newfn (_strchar) { Function `` () as __strchar; }
+
 any get_global () {
   if (!State.ready) {
+    // Do not attempt to initialize the state again
+    State.ready = true;
+
     Table tbl = State._G;
 
     tbl.set(anyStr("_G"), anyTable(tbl));
@@ -512,6 +590,9 @@ any get_global () {
 
     State.string_meta.set(anyStr("__index"), anyTable(State.string));
     tbl.set(anyStr("string"), anyTable(State.string));
+    State.string.set(anyStr("sub"), anyFn(__strsub()));
+    State.string.set(anyStr("byte"), anyFn(__strbyte()));
+    State.string.set(anyStr("char"), anyFn(__strchar()));
   }
   return anyTable(State._G);
 }

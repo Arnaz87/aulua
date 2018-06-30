@@ -1,10 +1,4 @@
 
-function showmeta (x) print(x, getmetatable(x)) end
-
-local x = {}
-local t = {}
-showmeta(x)
-print(setmetatable(x, t))
-showmeta(x)
-showmeta("hola")
-showmeta(1)
+local str = string.char(50, 51, 52);
+print(type(str), #str, str)
+print(str:byte(), str:byte(1, 3))
