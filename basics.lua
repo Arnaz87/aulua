@@ -176,7 +176,7 @@ bool_f = lua_m:func("tobool", {any_t}, {bool_t})
 func_f = lua_m:func("function", {func_t}, {any_t})
 call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
-global_f = lua_m:func("create_global", {}, {any_t})
+global_f = lua_m:func("get_global", {}, {any_t})
 
 stack_f = lua_m:func("newStack", {}, {stack_t})
 push_f = lua_m:func("push\x1dStack", {stack_t, any_t}, {})

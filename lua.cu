@@ -364,11 +364,35 @@ struct Table {
 
 type MetaTable (Table);
 
-any newTable () { return anyTable(new Table(emptyPairArr(), new MetaTable?())); }
+private Table emptyTable () { return new Table(emptyPairArr(), new MetaTable?()); }
+any newTable () { return anyTable(emptyTable()); }
 
-any get (any t, any k) {
-  if (testTable(t)) return getTable(t).get(k);
-  else error("Lua: tried to index a non-table value (" + tostr(t) + ")");
+Table? get_metatable (any a) {
+  if (testTable(a)) {
+    MetaTable? meta = getTable(a).meta;
+    if (meta.isnull()) return new Table?();
+    return (meta.get() as Table) as Table?;
+  }
+  if (testStr(a)) return State.string_meta as Table?;
+  return new Table?();
+}
+
+any get (any a, any k) {
+  Table? meta = get_metatable(a);
+  if (!meta.isnull()) {
+    any index = meta.get().get(anyStr("__index"));
+    if (!testTable(index)) return get(index, k);
+    if (!testFn(index)) {
+      Function f = getFn(index);
+      Stack args = newStack();
+      args.push(a);
+      args.push(k);
+      Stack result = f.apply(args);
+      return result.first();
+    }
+  }
+  if (testTable(a)) return getTable(a).get(k);
+  else error("Lua: tried to index a non-table value (" + tostr(a) + ")");
 }
 
 void set (any t, any k, any v) {
@@ -380,6 +404,19 @@ any length (any a) {
   if (testStr(a)) return anyInt(strlen(getStr(a)));
   error("Lua: attempt to get length of a " + typestr(a) + " value");
 }
+
+//======= State =======//
+
+struct StateT {
+  bool ready;
+  Table _G;
+  Table string;
+  Table string_meta;
+  Table loaded;
+}
+
+StateT State = new StateT(false, emptyTable(), emptyTable(), emptyTable(), emptyTable());
+
 
 //======= Builtins =======//
 
@@ -436,10 +473,9 @@ import module newfn (_type) { Function `` () as __type; }
 Stack _getmeta (Stack args) {
   int v = args.next();
   if (testNil(v)) error("Lua: bad argument #1 to 'getmetatable' (value expected)");
-  if (testTable(v)) {
-    Table t = getTable(v);
-    if (!t.meta.isnull())
-      return stackof(anyTable(t.meta.get() as Table));
+  Table? meta = get_metatable(v);
+  if (!meta.isnull()) {
+    return stackof(anyTable(meta.get()));
   }
   return stackof(nil());
 }
@@ -458,22 +494,24 @@ Stack _setmeta (Stack args) {
 }
 import module newfn (_setmeta) { Function `` () as __setmeta; }
 
-any create_global () {
-  Table tbl = new Table(emptyPairArr(), new MetaTable?());
+any get_global () {
+  if (!State.ready) {
+    Table tbl = State._G;
 
-  tbl.set(anyStr("_G"), anyTable(tbl));
-  tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
-  tbl.set(anyStr("assert"), anyFn(__assert()));
-  tbl.set(anyStr("error"), anyFn(__error()));
-  tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));
-  tbl.set(anyStr("print"), anyFn(__print()));
-  // rawequal, rawget, rawlen, rawset
-  tbl.set(anyStr("setmetatable"), anyFn(__setmeta()));
-  tbl.set(anyStr("tostring"), anyFn(__tostring()));
-  tbl.set(anyStr("tonumber"), anyFn(__tonumber()));
-  tbl.set(anyStr("type"), anyFn(__type()));
+    tbl.set(anyStr("_G"), anyTable(tbl));
+    tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
+    tbl.set(anyStr("assert"), anyFn(__assert()));
+    tbl.set(anyStr("error"), anyFn(__error()));
+    tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));
+    tbl.set(anyStr("print"), anyFn(__print()));
+    // rawequal, rawget, rawlen, rawset
+    tbl.set(anyStr("setmetatable"), anyFn(__setmeta()));
+    tbl.set(anyStr("tostring"), anyFn(__tostring()));
+    tbl.set(anyStr("tonumber"), anyFn(__tonumber()));
+    tbl.set(anyStr("type"), anyFn(__type()));
 
-  //Table table_tbl = new Table(emptyPairArr(), new MetaTable?());
-
-  return anyTable(tbl);
+    State.string_meta.set(anyStr("__index"), anyTable(State.string));
+    tbl.set(anyStr("string"), anyTable(State.string));
+  }
+  return anyTable(State._G);
 }
