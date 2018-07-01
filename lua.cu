@@ -323,11 +323,7 @@ Stack call (any _f, Stack args) {
 
 //======= Objects =======//
 
-void checkKey (any a) {
-  if (testStr(a)) return;
-  if (testInt(a)) return;
-  error("Lua: " + tostr(a) + " is not a valid key");
-}
+bool checkKey (any a) { return testStr(a) || testInt(a); }
 
 struct Pair { any key; any val; }
 
@@ -346,21 +342,46 @@ struct Table {
   MetaTable? meta;
 
   any get (Table this, any key) {
-    checkKey(key);
-    int i = this.arr.len();
-    // Look from the last inserted pair to the first
-    while (i > 0) {
-      i = i-1;
+    if (!checkKey(key)) return nil();
+    int i = 0;
+    while (i < this.arr.len()) {
       Pair pair = this.arr[i];
       if (equals(key, pair.key)) return pair.val;
+      i = i+1;
     }
     return nil();
   }
 
   void set (Table this, any key, any value) {
-    checkKey(key);
+    if (!checkKey(key)) error("Lua: " + tostr(key) + " is not a valid key");
+    int i = 0;
+    while (i < this.arr.len()) {
+      Pair pair = this.arr[i];
+      if (equals(key, pair.key)) {
+        pair.val = value;
+        return;
+      }
+      i = i+1;
+    }
     Pair pair = new Pair(key, value);
     this.arr.push(pair);
+  }
+
+  // TODO: This is temporary
+  any nextKey (Table this, any key) {
+    if (testNil(key) && (this.arr.len() > 0))
+      return this.arr[0].key;
+    int i = 0;
+    while (i < this.arr.len()) {
+      Pair pair = this.arr[i];
+      if (equals(key, pair.key)) {
+        if ((i+1) < this.arr.len())
+          return this.arr[i+1].key;
+        return nil();
+      }
+      i = i+1;
+    }
+    return nil();
   }
 }
 
@@ -389,6 +410,10 @@ Table? get_metatable (any a) {
 }
 
 any get (any a, any k) {
+  if (testTable(a)) {
+    any val = getTable(a).get(k);
+    if (!testNil(val)) return val;
+  }
   Table? meta = get_metatable(a);
   if (!meta.isnull()) {
     any index = meta.get().get(anyStr("__index"));
@@ -402,8 +427,8 @@ any get (any a, any k) {
       return result.first();
     }
   }
-  if (testTable(a)) return getTable(a).get(k);
-  else error("Lua: tried to index a non-table value (" + tostr(a) + ")");
+  if (testTable(a)) return nil();
+  error("Lua: tried to index a non-table value (" + tostr(a) + ")");
 }
 
 void set (any t, any k, any v) {
@@ -533,6 +558,15 @@ Stack _setmeta (Stack args) {
 }
 import module newfn (_setmeta) { Function `` () as __setmeta; }
 
+Stack _next (Stack args) {
+  any a = args.next();
+  if (!testTable(a)) error("Lua: bad argument #1 to 'next' (table expected, got "+typestr(a)+")");
+  any key = args.next();
+  Table t = getTable(a);
+  return stackof(t.nextKey(key));
+}
+import module newfn (_next) { Function `` () as __next; }
+
 
 import lua_lib.table { Stack lua_main (any) as table_main; }
 
@@ -542,9 +576,14 @@ import lua_lib.table { Stack lua_main (any) as table_main; }
 import lua_lib.pattern { Stack lua_main (any) as pattern_main; }
 import lua_lib.string { Stack lua_main (any) as string_main; }
 
-int valid_str_index (int i, int len) {
+int valid_start_index (int i, int len) {
   if (i < 0) i = len+i; else i = i-1;
   if (i < 0) return 0;
+  return i;
+}
+
+int valid_end_index (int i, int len) {
+  if (i < 0) i = len+i; else i = i-1;
   if (i >= len) return len-1;
   return i;
 }
@@ -553,10 +592,10 @@ Stack _strsub (Stack args) {
   string s = simple_string(args.next(), "1", "string.sub");
   int len = strlen(s);
 
-  int i = valid_str_index(simple_number(args.next(), "2", "string.sub"), len);
+  int i = valid_start_index(simple_number(args.next(), "2", "string.sub"), len);
 
   int j = len; any _j = args.next();
-  if (!testNil(_j)) j = valid_str_index(simple_number(_j, "3", "string.sub"), len);
+  if (!testNil(_j)) j = valid_end_index(simple_number(_j, "3", "string.sub"), len);
 
   string s2 = "";
   while (i <= j) {
@@ -574,10 +613,10 @@ Stack _strbyte (Stack args) {
   int len = strlen(s);
 
   int i = 0; any _i = args.next();
-  if (!testNil(_i)) i = valid_str_index(simple_number(_i, "2", "string.byte"), len);
+  if (!testNil(_i)) i = valid_start_index(simple_number(_i, "2", "string.byte"), len);
   
   int j = i; any _j = args.next();
-  if (!testNil(_j)) j = valid_str_index(simple_number(_j, "2", "string.byte"), len);
+  if (!testNil(_j)) j = valid_end_index(simple_number(_j, "2", "string.byte"), len);
 
   Stack stack = newStack();
   while (i <= j) {
@@ -619,6 +658,7 @@ any get_global () {
     tbl.set(anyStr("tostring"), anyFn(__tostring()));
     tbl.set(anyStr("tonumber"), anyFn(__tonumber()));
     tbl.set(anyStr("type"), anyFn(__type()));
+    tbl.set(anyStr("next"), anyFn(__next()));
     // Useless functions:
     // collectgarbage, dofile, load, loadfile
 

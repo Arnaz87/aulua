@@ -2,12 +2,20 @@
 _G.table = {}
 
 function _G.ipairs (t)
-  local function next (t, i)
+  local function nxt (t, i)
     i = i+1
     local v = t[i]
     if v then return i, v end
   end
-  return next, t, 0
+  return nxt, t, 0
+end
+
+function _G.pairs (t)
+  local function nxt (t, k)
+    k = next(t, k)
+    return k, t[k]
+  end
+  return nxt, t, nil
 end
 
 local function getstr (s, default, index, fname)

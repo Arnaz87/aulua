@@ -27,6 +27,7 @@ end
 
 function match (patt, exact)
   local matched = check(patt, exact)
+  if loud then print('"'..source..'".match("'..patt..'", '..tostring(exact)..')', matched and '"'..matched..'"' or "nil") end
   if matched and #matched > 0 then
 
     ---- Advance lines
@@ -269,7 +270,10 @@ function lex ()
 
   for i, op in pairs(OPS) do
     if match(op, true) then
-      return TK(op)
+      if loud then print("Did match " .. op) end
+      local tk = TK(op)
+      if loud then print(type(tk)) end
+      return tk
     end
   end
 
@@ -279,6 +283,9 @@ end
 
 function Lexer.next ()
   local trace
+
+  -- Cobre doesn't yet support protected calls
+  if not xpcall then xpcall = function (f) return true, f() end end
 
   status, tk = xpcall(lex, function (msg)
     if Lexer.error == nil then

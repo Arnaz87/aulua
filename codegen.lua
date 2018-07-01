@@ -326,10 +326,17 @@ function Function:compileExpr (node)
       elseif item.type == "item" then
         key = self:compileExpr{type="num", value=n}
         n = n+1
-        if i == #node.items and item.value.type == "call" then
-          local stack = self:compile_call(item.value)
-          self:inst{table_append_f, table, key, stack}
-          break
+        if i == #node.items then
+          local stack
+          if item.value.type == "call" then
+            stack = self:compile_call(item.value)
+          elseif item.value.type == "vararg" then
+            stack = self:get_vararg()
+          end
+          if stack then
+            self:inst{table_append_f, table, key, stack}
+            break
+          end
         end
       end
       local value = self:compileExpr(item.value)

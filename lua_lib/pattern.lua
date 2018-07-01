@@ -303,21 +303,49 @@ function string:find (patt, init, plain)
   if init < 1 then init = 1 end
 
   if plain then
-    for i = init, #self do
-      local sub = self:sub(patt, i, i + #patt)
-      if sub == patt then return i, i + #patt end
+    for i = init, #self + 1 - #patt do
+      local j = i + #patt - 1
+      local sub = self:sub(i, j)
+      if sub == patt then return i, j end
     end
   else
+    local max_start = #self
+    if patt:charat(1) == "^" then
+      max_start = 1
+      patt = patt:sub(2, -1)
+    end
+
+    local min_end = 0
+    if patt:charat(-1) == "$" and patt:charat(-2) ~= "%" then
+      min_end = #self
+      patt = patt:sub(1, -2)
+    end
+
     local pattern = parse_pattern(patt, 1)
-    for i = init, #self do
+    for i = init, max_start do
       local endpos = pattern(self, i)
-      if endpos then return i, endpos end
+      if endpos and endpos >= min_end then
+        return i, endpos
+      end
     end
   end
 end
 
-function string:match (patt, init)
-  local a, b = self:find(patt, init)
+function string:match (patt, init, plain)
+  local a, b = self:find(patt, init, plain)
   if a then return self:sub(a, b) end
+end
+
+assert(("abcd"):find("%w") == 1)
+assert(("abcd"):find("^%w") == 1)
+assert(("abcd"):find("%w$") == 4)
+assert(("abcd"):find("^%w$") == nil)
+assert(("ab2c"):find("%w%d") == 2)
+assert(("ab2c"):find("^%w%d") == nil)
+assert(("a$"):find("%w$") == nil)
+assert(("a$b"):find("%w%$") == 1)
+do
+  local a, b = ("+ -"):find("^[ \b\n\r\t\v]*")
+  assert(a == 1) assert(b == 0)
 end
 
