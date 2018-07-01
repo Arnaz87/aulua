@@ -364,6 +364,15 @@ struct Table {
   }
 }
 
+void table_append (any _t, any _n, Stack stack) {
+  Table t = getTable(_t);
+  int n = getInt(_n);
+  while (stack.more()) {
+    t.set(anyInt(n), stack.next());
+    n = n+1;
+  }
+}
+
 type MetaTable (Table);
 
 private Table emptyTable () { return new Table(emptyPairArr(), new MetaTable?()); }
@@ -404,6 +413,21 @@ void set (any t, any k, any v) {
 
 any length (any a) {
   if (testStr(a)) return anyInt(strlen(getStr(a)));
+  if (testTable(a)) {
+    Table t = getTable(a);
+    if (!t.meta.isnull()) {
+      any len_fn = (t.meta.get() as Table).get(anyStr("__len"));
+      if (!testNil(len_fn))
+        return call(len_fn, stackof(a)).first();
+    }
+
+    int i = 1;
+    while (true) {
+      any val = t.get(anyInt(i));
+      if (testNil(val)) return anyInt(i-1);
+      i = i+1;
+    }
+  }
   error("Lua: attempt to get length of a " + typestr(a) + " value");
 }
 
@@ -510,11 +534,19 @@ Stack _setmeta (Stack args) {
 import module newfn (_setmeta) { Function `` () as __setmeta; }
 
 
+import lua_lib.table { Stack lua_main (any) as table_main; }
+
+
 //======= String functions =======//
+
+import lua_lib.pattern { Stack lua_main (any) as pattern_main; }
+import lua_lib.string { Stack lua_main (any) as string_main; }
 
 int valid_str_index (int i, int len) {
   if (i < 0) i = len+i; else i = i-1;
-  if (i < 0) return 0; else return i;
+  if (i < 0) return 0;
+  if (i >= len) return len-1;
+  return i;
 }
 
 Stack _strsub (Stack args) {
@@ -587,12 +619,29 @@ any get_global () {
     tbl.set(anyStr("tostring"), anyFn(__tostring()));
     tbl.set(anyStr("tonumber"), anyFn(__tonumber()));
     tbl.set(anyStr("type"), anyFn(__type()));
+    // Useless functions:
+    // collectgarbage, dofile, load, loadfile
+
+    table_main(anyTable(State._G));
 
     State.string_meta.set(anyStr("__index"), anyTable(State.string));
     tbl.set(anyStr("string"), anyTable(State.string));
     State.string.set(anyStr("sub"), anyFn(__strsub()));
     State.string.set(anyStr("byte"), anyFn(__strbyte()));
     State.string.set(anyStr("char"), anyFn(__strchar()));
+    // These functions can be done in pure lua
+    // string.lua: format, len, lower, rep, reverse, upper
+    // pattern.lua: find, gmatch, gsub, match
+    // pack.lua: pack, packsize, unpack
+    string_main(anyTable(State._G));
+    pattern_main(anyTable(State._G));
+
+    // Missing libraries
+    // io and os libraries, math
+    // the table library can be made in pure lua
+
+    // package is mostly useless in Cobre
+    // I'm not sure if i'll implement coroutine, 
   }
   return anyTable(State._G);
 }

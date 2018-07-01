@@ -289,7 +289,7 @@ function Function:compileExpr (node)
     if node.op == "and" or node.op == "or" then
       local lbl = self:lbl()
       local a = self:compileExpr(node.left)
-      local r = self:inst{"var", a}
+      local r = self:inst{"local", a}
       if node.op == "or" then
         self:inst{"jif", lbl, r}
       else
@@ -317,7 +317,7 @@ function Function:compileExpr (node)
   elseif tp == "constructor" then
     local table = self:call(table_f)
     local n = 1
-    for _, item in ipairs(node.items) do
+    for i, item in ipairs(node.items) do
       local key
       if item.type == "indexitem" then
         key = self:compileExpr(item.key)
@@ -326,9 +326,14 @@ function Function:compileExpr (node)
       elseif item.type == "item" then
         key = self:compileExpr{type="num", value=n}
         n = n+1
+        if i == #node.items and item.value.type == "call" then
+          local stack = self:compile_call(item.value)
+          self:inst{table_append_f, table, key, stack}
+          break
+        end
       end
       local value = self:compileExpr(item.value)
-      self:call(set_f, table, key, value)
+      self:inst{set_f, table, key, value}
     end
     return table
   elseif tp == "call" then
@@ -519,7 +524,11 @@ function Function:compileStmt (node)
     end
     self:assign({self:compileLhs(node.lhs)}, {node.body}, node.line)
   elseif tp == "localfunc" then
-    self:assign({{lcl=node.name}}, {node.body})
+    -- These are not just assignments, local functions can be recursive
+    local inst = {"local"}
+    self.scope.locals[node.name] = inst
+    inst[2] = self:compileExpr(node.body)
+    self:inst(inst)
   elseif tp == "do" then
     self:push_scope()
     self:compileBlock(node.body)

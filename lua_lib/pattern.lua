@@ -3,6 +3,7 @@
   - ipairs
   - string.sub
   - string.byte
+  - string.lower
   - table.insert
 ]]
 
@@ -54,7 +55,6 @@ local function try_escape_class (patt, i)
   local item
   local char = patt:charat(i+1)
   local c = char:lower()
-
   if     c == "a" then item=letter
   elseif c == "c" then item=control
   elseif c == "d" then item=digit
@@ -72,7 +72,7 @@ local function try_escape_class (patt, i)
     end
     return item, i+2
   else
-    return make_charset(ch), i+2
+    return make_charset(char), i+2
   end
 end
 
@@ -320,6 +320,4 @@ function string:match (patt, init)
   local a, b = self:find(patt, init)
   if a then return self:sub(a, b) end
 end
-
-print(("abc0d"):match("%w*%d", -4))
 

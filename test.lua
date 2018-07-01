@@ -1,4 +1,7 @@
 
-local str = string.char(50, 51, 52);
-print(type(str), #str, str)
-print(str:byte(), str:byte(1, 3))
+local function x (a) return a or x(5) end
+print(x())
+
+--[[function f () return "a", "b", "c" end
+local t = {f(), "y", f()}
+for i, v in ipairs(t) do print(i, v) end]]

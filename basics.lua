@@ -186,6 +186,7 @@ append_f = lua_m:func("append\x1dStack", {stack_t, stack_t}, {})
 copystack_f = lua_m:func("copy\x1dStack", {stack_t}, {stack_t})
 
 table_f = lua_m:func("newTable", {}, {any_t})
+table_append_f = lua_m:func("table_append", {any_t, any_t, stack_t}, {})
 get_f = lua_m:func("get", {any_t, any_t}, {any_t})
 set_f = lua_m:func("set", {any_t, any_t, any_t}, {})
 
