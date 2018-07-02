@@ -1,6 +1,4 @@
 
-_G.table = {}
-
 function _G.ipairs (t)
   local function nxt (t, i)
     i = i+1
@@ -66,10 +64,4 @@ function table:insert (pos, value)
     end
   end
   self[pos] = value
-end
-
-function table.pack (...)
-  local t = {...}
-  t.n = #t
-  return t
 end

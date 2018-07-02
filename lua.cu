@@ -111,6 +111,12 @@ struct Stack {
     }
   }
 
+  int length (Stack this) {
+    int l = this.arr.len() - this.pos;
+    if (l < 0) return 0;
+    return l;
+  }
+
   Stack copy (Stack this) { return new Stack(this.pos, this.arr); }
 }
 
@@ -499,6 +505,10 @@ private int simple_number (any a, string n, string fname) {
   if (t) return x;
   error("Lua: bad argument #" + n + " to '" + fname + "' (number expected, got " + typestr(a) + ")");
 }
+private int simple_number_or (any a, int d, string n, string fname) {
+  if (testNil(a)) return d;
+  return simple_number(a, n, fname);
+}
 
 private Stack stackof (any a) {
   Stack stack = newStack();
@@ -582,6 +592,45 @@ Stack _next (Stack args) {
   return stackof(t.nextKey(key));
 }
 import module newfn (_next) { Function `` () as __next; }
+
+Stack _pack (Stack args) {
+  Table t = emptyTable();
+  int n = 0;
+  while (args.more()) {
+    n = n+1;
+    t.set(anyInt(n), args.next());
+  }
+  t.set(anyStr("n"), anyInt(n));
+  return stackof(anyTable(t));
+}
+import module newfn (_pack) { Function `` () as __pack; }
+
+Stack _unpack (Stack args) {
+  any a = args.next();
+  if (!testTable(a)) error("Lua: bad argument #1 to 'table.unpack' (table expected, got "+typestr(a)+")");
+  Table t = getTable(a);
+
+  int i = simple_number_or(args.next(), 1, "2", "table.unpack");
+  int j = simple_number_or(args.next(), getInt(length(a)), "3", "table.unpack");
+
+  Stack stack = newStack();
+  while (i <= j) {
+    stack.push(t.get(anyInt(i)));
+    i = i+1;
+  }
+  return stack;
+}
+import module newfn (_unpack) { Function `` () as __unpack; }
+
+Stack _select (Stack args) {
+  any a = args.next();
+  if (testStr(a) && (getStr(a) == "#")) return stackof(anyInt(args.length()));
+  int index = simple_number(a, "1", "select");
+  if (index < 1) error("bad argument #1 to 'select' (index out of range)");
+  args.pos = index;
+  return args;
+}
+import module newfn (_select) { Function `` () as __select; }
 
 
 import lua_lib.table { Stack lua_main (any) as table_main; }
@@ -669,16 +718,21 @@ any get_global () {
     tbl.set(anyStr("assert"), anyFn(__assert()));
     tbl.set(anyStr("error"), anyFn(__error()));
     tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));
+    tbl.set(anyStr("next"), anyFn(__next()));
     tbl.set(anyStr("print"), anyFn(__print()));
     // rawequal, rawget, rawlen, rawset
+    tbl.set(anyStr("select"), anyFn(__select()));
     tbl.set(anyStr("setmetatable"), anyFn(__setmeta()));
     tbl.set(anyStr("tostring"), anyFn(__tostring()));
     tbl.set(anyStr("tonumber"), anyFn(__tonumber()));
     tbl.set(anyStr("type"), anyFn(__type()));
-    tbl.set(anyStr("next"), anyFn(__next()));
     // Useless functions:
     // collectgarbage, dofile, load, loadfile
 
+    Table table_tbl = emptyTable();
+    tbl.set(anyStr("table"), anyTable(table_tbl));
+    table_tbl.set(anyStr("pack"), anyFn(__pack()));
+    table_tbl.set(anyStr("unpack"), anyFn(__unpack()));
     table_main(anyTable(State._G));
 
     State.string_meta.set(anyStr("__index"), anyTable(State.string));
