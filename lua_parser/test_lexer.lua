@@ -1,8 +1,8 @@
 local Lexer = require("lua_parser.lexer")
 
 local loud = false
-if not xpcall then
-  loud = true
+if _CU_VERSION then
+  --loud = true
   --_G.loud = true
 end
 
@@ -61,7 +61,7 @@ local function test (str, ...)
 end
 
 local function test_error (str)
-  do return end
+  if _CU_VERSION then return end
   Lexer.open(str)
   local msg = ""
   repeat
@@ -166,8 +166,6 @@ test("\"ho'la\" 'ho\"la'", STR("ho'la"), STR('ho"la'))
 test([["hola\\chao"]], STR([[hola\chao]]))
 test_error("'ho\nla'")
 test_error('"ho\\kla"')
--- TODO: Compiled with culua, it fails here.
--- culua doesn't yet support string comparison, only numbers
 test('"a\\x62c"', STR("abc"))
 test('"a\\x621c"', STR("ab1c"))
 test_error('"l\\x6m"')
@@ -177,6 +175,7 @@ test('"a\\098c"', STR("abc"))
 test('"a\\098c"', STR("abc"))
 test('"a\\0001c"', STR("a\0001c"))
 
+-- This one fails on culua
 test('"a\\u{62}c"', STR("abc"))
 test_error('"a\\u{62o}c"')
 test_error('"a\\u{62"')

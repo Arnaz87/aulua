@@ -53,3 +53,15 @@ function string.rep (s, n, sep)
   end
   return r
 end
+
+_G.utf8 = {}
+
+function utf8.char (...)
+  local t = {...}
+  for _, code in ipairs(t) do
+    if tonumber(code) > 127 then
+      error("Full unicode is not yet supported, only ASCII")
+    end
+  end
+  return string.char(...)
+end

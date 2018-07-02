@@ -27,7 +27,6 @@ end
 
 function match (patt, exact)
   local matched = check(patt, exact)
-  if loud then print('"'..source..'".match("'..patt..'", '..tostring(exact)..')', matched and '"'..matched..'"' or "nil") end
   if matched and #matched > 0 then
 
     ---- Advance lines
@@ -270,9 +269,7 @@ function lex ()
 
   for i, op in pairs(OPS) do
     if match(op, true) then
-      if loud then print("Did match " .. op) end
       local tk = TK(op)
-      if loud then print(type(tk)) end
       return tk
     end
   end

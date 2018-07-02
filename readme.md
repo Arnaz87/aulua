@@ -16,10 +16,13 @@ First you need to compile the Cobre library with [Culang](https://github.com/Arn
 - floats
 - the math library
 - the utf8 library
+- string comparison
+- table equality
 
 - TABLE INDEXING IS FREAKING LINEAR TIME!
 - GETTING A TABLE LENGTH IS EXPONENTIAL!
 - Please use a proper hashmap implementation.
+- string.sub is linear, because Cobre doesn't have yet substring extraction
 
 # Incompatibilities with standard Lua
 

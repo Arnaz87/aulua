@@ -331,7 +331,7 @@ function Function:compileExpr (node)
           if item.value.type == "call" then
             stack = self:compile_call(item.value)
           elseif item.value.type == "vararg" then
-            stack = self:get_vararg()
+            stack = self:inst{copystack_f, self:get_vararg()}
           end
           if stack then
             self:inst{table_append_f, table, key, stack}

@@ -285,22 +285,38 @@ bool equals (any a, any b) {
   return false;
 }
 
-bool _lt (any a, any b) {
-  if (testInt(a) && testInt(b)) return getInt(a) < getInt(b);
-  error("Lua: attempt to compare " + typestr(a) + " with " + typestr(b));
-}
-
-bool _le (any a, any b) {
-  if (testInt(a) && testInt(b)) return getInt(a) <= getInt(b);
-  error("Lua: attempt to compare " + typestr(a) + " with " + typestr(b));
+int cmp (any _a, any _b) {
+  if (testInt(_a) && testInt(_b)) {
+    int a = getInt(_a), b = getInt(_b);
+    if (a < b) return 0-1;
+    if (a == b) return 0;
+    return 1;
+  }
+  if (testStr(_a) && testStr(_b)) {
+    string a = getStr(_a), b = getStr(_b);
+    int al = strlen(a), bl = strlen(b);
+    int len = al; if (bl < al) len = bl;
+    int i = 0;
+    while (i < len) {
+      int ca = codeof(charat(a, i));
+      int cb = codeof(charat(b, i));
+      if (ca < cb) return 0-1;
+      if (ca > cb) return 1;
+      i = i+1;
+    }
+    if (al < bl) return 0-1;
+    if (al > bl) return 1;
+    return 0;
+  }
+  error("Lua: attempt to compare " + typestr(_a) + " with " + typestr(_b));
 }
 
 any eq (any a, any b) { return anyBool(equals(a, b)); }
 any ne (any a, any b) { return anyBool(!equals(a, b)); }
-any lt (any a, any b) { return anyBool(_lt(a, b)); }
-any le (any a, any b) { return anyBool(_le(a, b)); }
-any gt (any a, any b) { return anyBool(!_le(a, b)); }
-any ge (any a, any b) { return anyBool(!_lt(a, b)); }
+any lt (any a, any b) { return anyBool(cmp(a, b) < 0); }
+any le (any a, any b) { return anyBool(cmp(a, b) <= 0); }
+any gt (any a, any b) { return anyBool(cmp(a, b) > 0); }
+any ge (any a, any b) { return anyBool(cmp(a, b) >= 0); }
 
 any not (any a) { return anyBool(!tobool(a)); }
 any neg (any a) {
@@ -649,6 +665,7 @@ any get_global () {
 
     tbl.set(anyStr("_G"), anyTable(tbl));
     tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
+    tbl.set(anyStr("_CU_VERSION"), anyStr("0.5"));
     tbl.set(anyStr("assert"), anyFn(__assert()));
     tbl.set(anyStr("error"), anyFn(__error()));
     tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));
