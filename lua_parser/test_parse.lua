@@ -68,27 +68,29 @@ end
 local loud = false
 local showtrace = false
 
-for line in io.lines("lua_parser/test_parse.txt") do
-  if line:find("LOUD") ~= nil then loud = true end
-  if line:find("QUIT") ~= nil then break end
+if not _CU_VERSION then
+  for line in io.lines("lua_parser/test_parse.txt") do
+    if line:find("LOUD") ~= nil then loud = true end
+    if line:find("QUIT") ~= nil then break end
 
-  local fail = line:find("FAIL") ~= nil
+    local fail = line:find("FAIL") ~= nil
 
-  Parser.open(line)
-  local parsed = Parser.parse()
+    Parser.open(line)
+    local parsed = Parser.parse()
 
-  if fail then
-    if parsed then
-      FAIL(line, tostr(parsed))
-    elseif loud then
-      PASS(line, Parser.error)
-    end
-  else
-    if not parsed then
-      FAIL(line, Parser.error)
-      if showtrace then print(Parser.trace) end
-    elseif loud then
-      PASS(line, tostr(parsed))
+    if fail then
+      if parsed then
+        FAIL(line, tostr(parsed))
+      elseif loud then
+        PASS(line, Parser.error)
+      end
+    else
+      if not parsed then
+        FAIL(line, Parser.error)
+        if showtrace then print(Parser.trace) end
+      elseif loud then
+        PASS(line, tostr(parsed))
+      end
     end
   end
 end
@@ -99,6 +101,7 @@ end
 
 
 loud = false
+if _CU_VERSION then loud = true end
 
 local function test (str, expected)
   Parser.open(str)

@@ -41,8 +41,8 @@ end
 
 function check (...)
   if not token then return false end
-  local types = table.pack(...)
-  for i, tp in pairs(types) do
+  local types = {...}
+  for i, tp in ipairs(types) do
     if token.type == tp
     then return true end
   end
@@ -62,23 +62,13 @@ end
 function expect (...)
   local tk = try(...)
   if tk then return tk end
-
-  local types = table.pack(...)
-
-  local str = ""
-  for i = 1, #types do
-    if i > 1 then str = str .. " or " end
-    str = str .. types[i]:lower()
-  end
-
-  err(str .. " expected")
+  err(table.concat({...}, " or "):lower() .. " expected")
 end
 
 function match (what, who)
   local tk = try(what)
   if tk then return tk end
-  local where = who.line .. ":" .. who.column
-  err(what .. " expected (to close " .. who.type .. " at " .. where .. ")")
+  err(what .. " expected (to close " .. who.type .. " at line " .. who.line .. ")")
 end
 
 function get_name ()
@@ -545,6 +535,9 @@ end
 function Parser.parse ()
 
   local trace
+
+  -- Cobre doesn't yet support protected calls
+  if not xpcall then xpcall = function (f) return true, f() end end
 
   status, prog = xpcall(parse_program, function (msg)
     if Parser.error == nil then

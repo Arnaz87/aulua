@@ -1,8 +1,6 @@
 
 // TODO: Use 64 bit floats, when available in cobre
 
-import cobre.any { type any; }
-
 import cobre.system {
   void println (string);
   void error (string);
@@ -18,35 +16,23 @@ import cobre.string {
   char newchar (int);
 }
 
-import cobre.any (int) {
-  any `new` (int) as anyInt;
-  int get (any) as getInt;
-  bool test (any) as testInt;
-}
+any anyInt (int x) { return x as any; }
+any anyStr (string x) { return x as any; }
+any anyTable (Table x) { return x as any; }
+any anyFn (Function x) { return x as any; }
 
-import cobre.any (string) {
-  any `new` (string) as anyStr;
-  string get (any) as getStr;
-  bool test (any) as testStr;
-}
+bool testInt (any a) { return !(a as int?).isnull(); }
+bool testStr (any a) { return !(a as string?).isnull(); }
+bool testBool (any a) { return !(a as bool?).isnull(); }
+bool testTable (any a) { return !(a as Table?).isnull(); }
+bool testFn (any a) { return !(a as Function?).isnull(); }
+bool testNil (any a) { return !(a as nil_t?).isnull(); }
 
-import cobre.any (bool) {
-  any `new` (bool) as anyBool;
-  bool get (any) as getBool;
-  bool test (any) as testBool;
-}
-
-import cobre.any (Table) {
-  any `new` (Table) as anyTable;
-  Table get (any) as getTable;
-  bool test (any) as testTable;
-}
-
-import cobre.any (Function) {
-  any `new` (Function) as anyFn;
-  Function get (any) as getFn;
-  bool test (any) as testFn;
-}
+int getInt (any a) { return (a as int?).get(); }
+string getStr (any a) { return (a as string?).get(); }
+bool getBool (any a) { return (a as bool?).get(); }
+Table getTable (any a) { return (a as Table?).get(); }
+Function getFn (any a) { return (a as Function?).get(); }
 
 import cobre.array (any) {
   type `` as AnyArr {
@@ -70,12 +56,6 @@ export closure;
 
 struct unit_t {bool dummy;}
 type nil_t (unit_t);
-
-import cobre.any (nil_t) {
-  any `new` (nil_t) as anyNil;
-  nil_t get (any) as getNil;
-  bool test (any) as testNil;
-}
 
 struct Stack {
   int pos;
@@ -241,9 +221,9 @@ any concat (any a, any b) {
 }
 
 // TODO: Real nil, not just 0
-any nil () { return anyNil(new unit_t(true) as nil_t); }
-any `true` () { return anyBool(true); }
-any `false` () { return anyBool(false); }
+any nil () { return (new unit_t(true) as nil_t) as any; }
+any `true` () { return true as any; }
+any `false` () { return false as any; }
 
 export anyStr as string;
 export anyInt as int;
@@ -317,14 +297,14 @@ int cmp (any _a, any _b) {
   error("Lua: attempt to compare " + typestr(_a) + " with " + typestr(_b));
 }
 
-any eq (any a, any b) { return anyBool(equals(a, b)); }
-any ne (any a, any b) { return anyBool(!equals(a, b)); }
-any lt (any a, any b) { return anyBool(cmp(a, b) < 0); }
-any le (any a, any b) { return anyBool(cmp(a, b) <= 0); }
-any gt (any a, any b) { return anyBool(cmp(a, b) > 0); }
-any ge (any a, any b) { return anyBool(cmp(a, b) >= 0); }
+any eq (any a, any b) { return equals(a, b) as any; }
+any ne (any a, any b) { return !equals(a, b) as any; }
+any lt (any a, any b) { return (cmp(a, b) < 0) as any; }
+any le (any a, any b) { return (cmp(a, b) <= 0) as any; }
+any gt (any a, any b) { return (cmp(a, b) > 0) as any; }
+any ge (any a, any b) { return (cmp(a, b) >= 0) as any; }
 
-any not (any a) { return anyBool(!tobool(a)); }
+any not (any a) { return !tobool(a) as any; }
 any neg (any a) {
   int n; bool t;
   n, t = getNum(a);
@@ -636,6 +616,38 @@ import module newfn (_select) { Function `` () as __select; }
 import lua_lib.table { Stack lua_main (any) as table_main; }
 
 
+//======= IO and OS =======//
+
+/*import cobre.io {
+  type file as File;
+  type mode as FileMode;
+  FileMode r();
+}
+
+File[] files = new File[]();
+
+Stack _strsub (Stack args) {
+  string s = simple_string(args.next(), "1", "string.sub");
+  int len = strlen(s);
+
+  int i = valid_start_index(simple_number(args.next(), "2", "string.sub"), len);
+
+  int j = len; any _j = args.next();
+  if (!testNil(_j)) j = valid_end_index(simple_number(_j, "3", "string.sub"), len);
+
+  string s2 = "";
+  while (i <= j) {
+    char ch;
+    ch, i = charat(s,i);
+    s2 = addch(s2, ch);
+  }
+
+  return stackof(anyStr(s2));
+}
+import module newfn (_strsub) { Function `` () as __strsub; }*/
+
+
+
 //======= String functions =======//
 
 import lua_lib.pattern { Stack lua_main (any) as pattern_main; }
@@ -714,7 +726,7 @@ any get_global () {
 
     tbl.set(anyStr("_G"), anyTable(tbl));
     tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
-    tbl.set(anyStr("_CU_VERSION"), anyStr("0.5"));
+    tbl.set(anyStr("_CU_VERSION"), anyStr("0.6"));
     tbl.set(anyStr("assert"), anyFn(__assert()));
     tbl.set(anyStr("error"), anyFn(__error()));
     tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));

@@ -587,7 +587,7 @@ function Function:compileStmt (node)
     self:inst{"label", start} 
     self:compileBlock(node.body)
     local cond = self:compileExpr(node.cond)
-    self:inst{"jif", start, cond}
+    self:inst{"nif", start, cond}
     self:inst{"label", endl}
 
     self:pop_scope()

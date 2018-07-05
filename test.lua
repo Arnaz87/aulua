@@ -1,12 +1,22 @@
 
-local t = table.pack("a", "b", nil, "c", nil)
-print(t.n, #t)
-for i = 1, t.n do print(i, t[i]) end
+local Parser = require("lua_parser.parser")
 
-print(table.unpack({"a", "b", nil, nil, "c", nil}))
-print(table.unpack({"a", "b", nil, nil, "c", nil}, 2, 5))
+function show (obj, indent)
+  if type(obj) ~= "table" then
+    return(tostring(obj))
+  end
+  indent = indent or ""
+  local str = "{\n"
+  for k, v in pairs(obj) do
+    local pair = tostring(k) .. " = " .. show(v, indent .. "  ")
+    str = str .. indent .. pair .. "\n"
+  end
+  return str .. indent .. "}"
+end
 
-print(select("#", 1, 2, 3))
-print(select(1, 1, 2, 3))
-print(select(3, 1, 2, 3))
-print(select("#", select(6, 1, 2, 3)))
+Parser.open("local r = a + b")
+local node = Parser.parse()
+
+print(show(node))
+
+
