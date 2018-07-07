@@ -142,7 +142,7 @@ function Function:get_level_ancestor (level)
 end
 
 function Function:createFunction (node)
-  local fn = code("function")
+  local fn = code(node.repr or "function")
   fn.node = node
   fn.parent = self
   fn.level = self.level + 1
@@ -356,7 +356,7 @@ function Function:assign (vars, values, line)
   for i = 1, last do
     local var, value, reg = vars[i], values[i]
 
-    if i == #values then
+    if i == #values and i < #vars then
       if value.type == "call" then
         stack = self:compile_call(value)
       elseif value.type == "vararg" then
@@ -367,6 +367,10 @@ function Function:assign (vars, values, line)
     if stack then
       reg = self:call(next_f, stack)
     elseif value then
+
+      if var.repr then value.repr = var.repr
+      elseif var.lcl then value.repr = var.lcl end
+
       reg = self:compileExpr(value)
     else reg = self:call(nil_f) end
 
@@ -397,14 +401,36 @@ function Function:compileLhs (node)
   elseif node.type == "index" then
     return {
       base = self:compileExpr(node.base),
-      key = self:compileExpr(node.key)
+      key = self:compileExpr(node.key),
+      repr = getRepr(node)
     }
   elseif node.type == "field" then
     return {
       base = self:compileExpr(node.base),
-      key = self:compileExpr{type="str", value=node.key}
+      key = self:compileExpr{type="str", value=node.key},
+      repr = getRepr(node)
     }
   else error("wtf") end
+end
+
+function getRepr (node)
+  if node.type == "var" then return node.name
+  elseif node.type == "field" then
+    return getRepr(node.base) .. "." .. node.key
+  elseif node.type == "index" then
+    if node.key.type == "str" then
+      return getRepr(node.base) .. "." .. node.key.value
+    else
+      local key = getRepr(node.key)
+      if key then
+        return getRepr(node.base) .. "[" .. key .. "]"
+      end
+    end
+  elseif node.type == "num" or node.type == "const" then
+    return node.value
+  elseif node.type == "string" then
+    return '"' ..  node.value .. '"'
+  end
 end
 
 function Function:compile_numfor (node)
@@ -534,6 +560,7 @@ function Function:compileStmt (node)
     -- These are not just assignments, local functions can be recursive
     local inst = {"local"}
     self.scope.locals[node.name] = inst
+    node.repr = node.name
     inst[2] = self:compileExpr(node.body)
     self:inst(inst)
   elseif tp == "do" then

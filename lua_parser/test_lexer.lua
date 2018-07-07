@@ -1,10 +1,7 @@
 local Lexer = require("lua_parser.lexer")
 
 local loud = false
-if _CU_VERSION then
-  --loud = true
-  --_G.loud = true
-end
+if _CU_VERSION then loud = true end
 
 local function STR (str) return { type = "STR", value = str } end
 local function NUM (val) return { type = "NUM", value = val } end

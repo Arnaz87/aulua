@@ -9,7 +9,7 @@ function show (obj, indent)
   local str = "{\n"
   for k, v in pairs(obj) do
     local pair = tostring(k) .. " = " .. show(v, indent .. "  ")
-    str = str .. indent .. pair .. "\n"
+    str = str .. indent .. "  " .. pair .. "\n"
   end
   return str .. indent .. "}"
 end

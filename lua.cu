@@ -20,19 +20,20 @@ any anyInt (int x) { return x as any; }
 any anyStr (string x) { return x as any; }
 any anyTable (Table x) { return x as any; }
 any anyFn (Function x) { return x as any; }
+any anyBool (bool x) { return x as any; }
 
-bool testInt (any a) { return !(a as int?).isnull(); }
-bool testStr (any a) { return !(a as string?).isnull(); }
-bool testBool (any a) { return !(a as bool?).isnull(); }
-bool testTable (any a) { return !(a as Table?).isnull(); }
-bool testFn (any a) { return !(a as Function?).isnull(); }
-bool testNil (any a) { return !(a as nil_t?).isnull(); }
+bool testInt (any a) { return a is int; }
+bool testStr (any a) { return a is string; }
+bool testBool (any a) { return a is bool; }
+bool testTable (any a) { return a is Table; }
+bool testFn (any a) { return a is Function; }
+bool testNil (any a) { return a is nil_t; }
 
-int getInt (any a) { return (a as int?).get(); }
-string getStr (any a) { return (a as string?).get(); }
-bool getBool (any a) { return (a as bool?).get(); }
-Table getTable (any a) { return (a as Table?).get(); }
-Function getFn (any a) { return (a as Function?).get(); }
+int getInt (any a) { return a as int; }
+string getStr (any a) { return a as string; }
+bool getBool (any a) { return a as bool; }
+Table getTable (any a) { return a as Table; }
+Function getFn (any a) { return a as Function; }
 
 import cobre.array (any) {
   type `` as AnyArr {
@@ -298,13 +299,13 @@ int cmp (any _a, any _b) {
 }
 
 any eq (any a, any b) { return equals(a, b) as any; }
-any ne (any a, any b) { return !equals(a, b) as any; }
-any lt (any a, any b) { return (cmp(a, b) < 0) as any; }
-any le (any a, any b) { return (cmp(a, b) <= 0) as any; }
-any gt (any a, any b) { return (cmp(a, b) > 0) as any; }
-any ge (any a, any b) { return (cmp(a, b) >= 0) as any; }
+any ne (any a, any b) { return anyBool(!equals(a, b)); }
+any lt (any a, any b) { return anyBool(cmp(a, b) < 0); }
+any le (any a, any b) { return anyBool(cmp(a, b) <= 0); }
+any gt (any a, any b) { return anyBool(cmp(a, b) > 0); }
+any ge (any a, any b) { return anyBool(cmp(a, b) >= 0); }
 
-any not (any a) { return !tobool(a) as any; }
+any not (any a) { return anyBool(!tobool(a)); }
 any neg (any a) {
   int n; bool t;
   n, t = getNum(a);
@@ -694,6 +695,7 @@ Stack _strbyte (Stack args) {
   
   int j = i; any _j = args.next();
   if (!testNil(_j)) j = valid_end_index(simple_number(_j, "2", "string.byte"), len);
+  if (j >= len) j = len-1;
 
   Stack stack = newStack();
   while (i <= j) {
