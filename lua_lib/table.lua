@@ -1,5 +1,5 @@
 
-function _G.ipairs (t)
+function ipairs (t)
   local function nxt (t, i)
     i = i+1
     local v = t[i]
@@ -8,7 +8,7 @@ function _G.ipairs (t)
   return nxt, t, 0
 end
 
-function _G.pairs (t)
+function pairs (t)
   local function nxt (t, k)
     k = next(t, k)
     return k, t[k]

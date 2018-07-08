@@ -249,6 +249,7 @@ local function find (str, patt, init)
   return pattern(str, init or 1)
 end
 
+--[[
 -- classes
 assert(find("a", "."))
 assert(find("a", "%l"))
@@ -278,8 +279,7 @@ assert(find("a1b2", "%w-%d") == 2)
 assert(not find("3", "%l+"))
 assert(find("a0", ".?%d") == 2)
 assert(find("0", ".?%d") == 1)
-
---string.charat = nil
+--]]
 
 function string:find (patt, init, plain)
 
@@ -336,6 +336,7 @@ function string:match (patt, init, plain)
   if a then return self:sub(a, b) end
 end
 
+--[[
 assert(("abcd"):find("%w") == 1)
 assert(("abcd"):find("^%w") == 1)
 assert(("abcd"):find("%w$") == 4)
@@ -348,4 +349,4 @@ do
   local a, b = ("+ -"):find("^[ \b\n\r\t\v]*")
   assert(a == 1) assert(b == 0)
 end
-
+]]

@@ -1,11 +1,10 @@
 
-return function (file)
-  if type(file) == "string" then
-    file = io.open(file, "wb")
-  end
+return function (_wbyte)
 
   local function wbyte (...)
-    file:write(string.char(...))
+    for _, b in ipairs{...} do
+      _wbyte(b)
+    end
   end
 
   local function wint (n)
@@ -19,12 +18,14 @@ return function (file)
     wbyte(n & 0x7f)
   end
 
+  local function rstr (str) wbyte(str:byte(1, -1)) end
+
   local function wstr (str)
     wint(#str)
-    file:write(str)
+    rstr(str)
   end
 
-  file:write("Cobre 0.6\0")
+  rstr("Cobre 0.6\0")
   wint(#modules+1) -- Count the export module, but not the argument module
   wbyte(2, 2) -- Export module is a module definition with 2 items
 
@@ -169,7 +170,7 @@ return function (file)
       wint(value << 1 | 1)
     elseif type(value) == "string" then
       wint(#value << 2 | 2)
-      file:write(value)
+      rstr(value)
     elseif type(value) == "table" then
       wint(#value << 2)
       for i = 1, #value do

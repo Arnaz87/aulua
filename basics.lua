@@ -1,10 +1,19 @@
 
-modules = {}
-types = {}
-funcs = {}
+local create_basic_items
 
-metadata = {}
-sourcemap = {"source map"}
+function create_compiler_state ()
+  modules = {}
+  types = {}
+  funcs = {}
+
+  metadata = {}
+  sourcemap = {"source map"}
+
+  constants = {}
+  constant_cache = {}
+
+  create_basic_items()
+end
 
 Module = {}
 Module.__index = Module
@@ -54,6 +63,7 @@ end
 
 Function = {}
 Function.__index = Function
+
 function Function:id () return self._id end
 function Function:reg ()
   local r = {id=#self.regs}
@@ -112,7 +122,6 @@ function Function:__tostring ()
   return ":lua:" .. (self.name or "")
 end
 
-constants = {}
 
 function raw_const (tp, value)
   local data = {_id=#constants, type=tp, value=value, ins={}, outs={0}}
@@ -131,7 +140,6 @@ function const_call (f, ...)
   return data
 end
 
-constant_cache = {}
 function constant (value)
   local cns = constant_cache[value]
   if cns then return cns end
@@ -147,65 +155,67 @@ function constant (value)
   return cns
 end
 
-int_m = module("cobre\x1fint")
-bool_m = module("cobre\x1fbool")
-str_m = module("cobre\x1fstring")
-lua_m = module("lua")
-closure_m = module("closure")
-closure_m.from = lua_m
-record_m = module("cobre\x1frecord")
-any_m = module("cobre\x1fany")
-buffer_m = module("cobre\x1fbuffer")
+function create_basic_items ()
+  int_m = module("cobre\x1fint")
+  bool_m = module("cobre\x1fbool")
+  str_m = module("cobre\x1fstring")
+  lua_m = module("lua")
+  closure_m = module("closure")
+  closure_m.from = lua_m
+  record_m = module("cobre\x1frecord")
+  any_m = module("cobre\x1fany")
+  buffer_m = module("cobre\x1fbuffer")
 
-any_t = any_m:type("any")
-bool_t = bool_m:type("bool")
-bin_t = buffer_m:type("buffer")
-int_t = int_m:type("int")
-string_t = str_m:type("string")
-stack_t = lua_m:type("Stack")
-func_t = lua_m:type("Function")
+  any_t = any_m:type("any")
+  bool_t = bool_m:type("bool")
+  bin_t = buffer_m:type("buffer")
+  int_t = int_m:type("int")
+  string_t = str_m:type("string")
+  stack_t = lua_m:type("Stack")
+  func_t = lua_m:type("Function")
 
-rawstr_f = str_m:func("new", {bin_t}, {string_t})
-anyint_f = lua_m:func("int", {int_t}, {any_t})
-anystr_f = lua_m:func("string", {string_t}, {any_t})
+  rawstr_f = str_m:func("new", {bin_t}, {string_t})
+  anyint_f = lua_m:func("int", {int_t}, {any_t})
+  anystr_f = lua_m:func("string", {string_t}, {any_t})
 
-nil_f = lua_m:func("nil", {}, {any_t})
-true_f = lua_m:func("true", {}, {any_t})
-false_f = lua_m:func("false", {}, {any_t})
-bool_f = lua_m:func("tobool", {any_t}, {bool_t})
-func_f = lua_m:func("function", {func_t}, {any_t})
-call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
+  nil_f = lua_m:func("nil", {}, {any_t})
+  true_f = lua_m:func("true", {}, {any_t})
+  false_f = lua_m:func("false", {}, {any_t})
+  bool_f = lua_m:func("tobool", {any_t}, {bool_t})
+  func_f = lua_m:func("function", {func_t}, {any_t})
+  call_f = lua_m:func("call", {any_t, stack_t}, {stack_t})
 
-global_f = lua_m:func("get_global", {}, {any_t})
+  global_f = lua_m:func("get_global", {}, {any_t})
 
-stack_f = lua_m:func("newStack", {}, {stack_t})
-push_f = lua_m:func("push\x1dStack", {stack_t, any_t}, {})
-next_f = lua_m:func("next\x1dStack", {stack_t}, {any_t})
-first_f = lua_m:func("first\x1dStack", {stack_t}, {any_t})
-append_f = lua_m:func("append\x1dStack", {stack_t, stack_t}, {})
-copystack_f = lua_m:func("copy\x1dStack", {stack_t}, {stack_t})
+  stack_f = lua_m:func("newStack", {}, {stack_t})
+  push_f = lua_m:func("push\x1dStack", {stack_t, any_t}, {})
+  next_f = lua_m:func("next\x1dStack", {stack_t}, {any_t})
+  first_f = lua_m:func("first\x1dStack", {stack_t}, {any_t})
+  append_f = lua_m:func("append\x1dStack", {stack_t, stack_t}, {})
+  copystack_f = lua_m:func("copy\x1dStack", {stack_t}, {stack_t})
 
-table_f = lua_m:func("newTable", {}, {any_t})
-table_append_f = lua_m:func("table_append", {any_t, any_t, stack_t}, {})
-get_f = lua_m:func("get", {any_t, any_t}, {any_t})
-set_f = lua_m:func("set", {any_t, any_t, any_t}, {})
+  table_f = lua_m:func("newTable", {}, {any_t})
+  table_append_f = lua_m:func("table_append", {any_t, any_t, stack_t}, {})
+  get_f = lua_m:func("get", {any_t, any_t}, {any_t})
+  set_f = lua_m:func("set", {any_t, any_t, any_t}, {})
 
-binops = {
-  ["+"] = lua_m:func("add", {any_t,any_t}, {any_t}),
-  ["-"] = lua_m:func("sub", {any_t,any_t}, {any_t}),
-  ["*"] = lua_m:func("mul", {any_t,any_t}, {any_t}),
-  ["/"] = lua_m:func("div", {any_t,any_t}, {any_t}),
-  [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
-  ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
-  ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),
-  ["<"] = lua_m:func("lt", {any_t,any_t}, {any_t}),
-  [">"] = lua_m:func("gt", {any_t,any_t}, {any_t}),
-  ["<="] = lua_m:func("le", {any_t,any_t}, {any_t}),
-  [">="] = lua_m:func("ge", {any_t,any_t}, {any_t}),
-}
+  binops = {
+    ["+"] = lua_m:func("add", {any_t,any_t}, {any_t}),
+    ["-"] = lua_m:func("sub", {any_t,any_t}, {any_t}),
+    ["*"] = lua_m:func("mul", {any_t,any_t}, {any_t}),
+    ["/"] = lua_m:func("div", {any_t,any_t}, {any_t}),
+    [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
+    ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
+    ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),
+    ["<"] = lua_m:func("lt", {any_t,any_t}, {any_t}),
+    [">"] = lua_m:func("gt", {any_t,any_t}, {any_t}),
+    ["<="] = lua_m:func("le", {any_t,any_t}, {any_t}),
+    [">="] = lua_m:func("ge", {any_t,any_t}, {any_t}),
+  }
 
-unops = {
-  ["not"] = lua_m:func("not", {any_t}, {any_t}),
-  ["-"] = lua_m:func("neg", {any_t}, {any_t}),
-  ["#"] = lua_m:func("length", {any_t}, {any_t}),
-}
+  unops = {
+    ["not"] = lua_m:func("not", {any_t}, {any_t}),
+    ["-"] = lua_m:func("neg", {any_t}, {any_t}),
+    ["#"] = lua_m:func("length", {any_t}, {any_t}),
+  }
+end

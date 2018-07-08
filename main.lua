@@ -47,4 +47,6 @@ ast = Parser.parse()
 if not ast then print("Error: " .. Parser.error) os.exit(1) end
 
 require("codegen")(ast, filename)
-require("write")(out_filename)
+
+file = io.open(out_filename, "wb")
+require("write")(function (code) file:write(string.char(code)) end)

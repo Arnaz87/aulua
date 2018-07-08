@@ -1,5 +1,5 @@
 
-function getstring (s, i)
+local function getstring (s, i)
   i = i or 1
   local t = type(s)
   if t == "number" then s = tostring(s) end

@@ -728,6 +728,8 @@ function Function:generate_sourcemap ()
 end
 
 return function (ast, filename)
+  create_compiler_state() -- basics.lua
+
   lua_main = code("lua_main")
   lua_main.ins = {any_t.id}
   lua_main.outs = {stack_t.id}
