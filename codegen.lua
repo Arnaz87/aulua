@@ -2,6 +2,25 @@
 require("helpers")
 require("basics")
 
+-- TODO: Add these modules to lua
+if _CU_VERSION then
+  math = {
+    max = function (a, b)
+      if a >= b
+      then return a
+      else return b
+      end
+    end
+  }
+  function table.move (a1, f, e, t, a2)
+    if not a2 then error("cannot move into same table") end
+    for i = f, e do
+      a2[t] = a1[i]
+      t = t+1
+    end
+  end
+end
+
 function Function:create_upval_info ()
   -- Every function has an upval type, which is a record with all the upvalues
 
@@ -68,7 +87,7 @@ function Function:build_upvals ()
 
     local ancestor = self.parent
     while ancestor.parent do
-      local reg = self:inst{ancestor.parent_upval_getter, reg}
+      reg = self:inst{ancestor.parent_upval_getter, reg}
       self.upval_level_regs[ancestor.parent.level] = reg
       ancestor = ancestor.parent
     end
@@ -633,6 +652,7 @@ function Function:compileStmt (node)
     --     (no visible label 'label-name' for <goto> at line N)
     -- * locals cannot be declared between a forward goto and it's label
     --     (<goto label-name> at line N jumps into the scope of local 'x')
+    --     (<goto label-name> at line N skips declaration of local 'x') (better)
     -- * labels are per block, not per function like currently
     -- Currently, the VM will crash on certain cases of the second restriction
     self:inst{"jmp", node.name, line=node.line}

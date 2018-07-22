@@ -1,5 +1,4 @@
 out
-lua
 test
 test.lua
-lua_lib.*
+/dist/

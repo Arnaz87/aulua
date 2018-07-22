@@ -1,6 +1,9 @@
 
 return function (_wbyte)
 
+  -- TODO: I'm using arithmetic because bit operations are not yet
+  -- implemented in cobre nor culang
+
   local function wbyte (...)
     for _, b in ipairs{...} do
       _wbyte(b)
@@ -10,12 +13,18 @@ return function (_wbyte)
   local function wint (n)
     local function f (n)
       if n > 0 then
-        f(n >> 7)
-        wbyte((n & 0x7f) | 0x80)
+        --f(n >> 7)
+        --wbyte((n & 0x7f) | 0x80)
+        local m = n//128
+        f(m)
+        wbyte((n - (m*128)) + 128)
       end
     end
-    f(n >> 7)
-    wbyte(n & 0x7f)
+    --f(n >> 7)
+    --wbyte(n & 0x7f)
+    local m = n//128
+    f(m)
+    wbyte(n - (m*128))
   end
 
   local function rstr (str) wbyte(str:byte(1, -1)) end
@@ -167,12 +176,12 @@ return function (_wbyte)
 
   function write_node (value)
     if type(value) == "number" then
-      wint(value << 1 | 1)
+      wint(value*2 + 1)--(value << 1 | 1)
     elseif type(value) == "string" then
-      wint(#value << 2 | 2)
+      wint(#value*4 + 2)--(#value << 2 | 2)
       rstr(value)
     elseif type(value) == "table" then
-      wint(#value << 2)
+      wint(#value*4)--(#value << 2)
       for i = 1, #value do
         write_node(value[i])
       end
