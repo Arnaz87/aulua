@@ -7,7 +7,11 @@ Compiles **Lua 5.3** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm).
 
 # Usage
 
-First you need to compile the Cobre library with [Culang](https://github.com/Arnaz87/culang), run `cobre culang lua.cu lua` and optionally `cobre --install lua`. Then, run `lua compiler.lua ` which currently inputs *test.lua* and outputs *out*, which is a cobre module, run with `cobre out`.
+First you need to compile the Cobre library with [Culang](https://github.com/Arnaz87/culang), then run `bash build.sh install`, this will compile all source files including the lua code, and install them in the system.
+
+The command `lua culua/init.lua test.lua` will compile test.lua into a cobre module `test`, then you can run `cobre test` to execute it (will print 42). 
+
+The compiler is also compiled and installed as a cobre module itself, but currently does not support file reading, so it can only be used as a library, not as a standalone utility.
 
 # Missing features
 

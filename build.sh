@@ -19,3 +19,10 @@ lua $MAIN -o dist/ culua/compile.lua
 lua $MAIN -o dist/culua culua/init.lua
 
 cobre culang lua.cu dist/lua
+
+if [ "$1" == "install" ]; then
+  cd dist
+  for a in $(ls); do
+    cobre --install $a
+  done
+fi

@@ -6,16 +6,13 @@ This parser can be used independently from the compiler. My main references for 
 - [Yueliang](http://yueliang.luaforge.net/)
 - [LuaMinify](https://github.com/stravant/LuaMinify)
 
-To use it, copy *lexer.lua* and *parser.lua* into your source directory.
+To use it, copy the whole *lua_parser* folder into your source directory.
 
 ~~~ lua
-local Parser = require("parser")
+local parse = require("lua_parser")
 
--- Can only read from a string with the lua code
-Parser.open("print('hello world')")
-
--- returns a list of statement nodes
-local ast = Parser.parse()
+-- Returns a list of statement ast nodes
+local stmt_list = parse("print('hello world')")
 ~~~
 
 **Lisence**: This project is free software, published under the
