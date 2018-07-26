@@ -1,5 +1,5 @@
 
-local compiler = require("simple")
+local compiler = require("culua.compile")
 
 --[[if _CU_VERSION then
   function string.format (fmt, num)

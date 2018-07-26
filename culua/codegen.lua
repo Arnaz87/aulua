@@ -1,6 +1,6 @@
 
-require("helpers")
-require("basics")
+require("culua.helpers")
+require("culua.basics")
 
 -- TODO: Add these modules to lua
 if _CU_VERSION then

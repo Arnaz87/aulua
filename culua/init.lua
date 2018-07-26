@@ -1,5 +1,5 @@
 
-Parser = require("lua_parser.parser")
+local compile = require("culua.compile")
 
 function help (msg)
   if msg then print(msg) end
@@ -49,13 +49,16 @@ elseif out_filename:match("/$") then
   out_filename = out_filename .. default
 end
 
-file = io.open(filename, "r")
-contents = file:read("a")
-Parser.open(contents)
-ast = Parser.parse()
-if not ast then print("Error: " .. Parser.error) os.exit(1) end
+input_file = io.open(filename, "r")
+contents = input_file:read("a")
+input_file:close()
 
-require("codegen")(ast, filename)
+output_file = io.open(out_filename, "wb")
+function callback (byte)
+  output_file:write(string.char(byte))
+end
 
-file = io.open(out_filename, "wb")
-require("write")(function (code) file:write(string.char(code)) end)
+local err = compile(contents, callback, filename)
+output_file:close()
+
+if err then print("Error: " .. Parser.error) os.exit(1) end
