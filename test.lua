@@ -1,8 +1,11 @@
 
-local compiler = require("culua.compile")
+local t = {"a", "b", "c", "d", "e"}
+local function show ()
+  print("{" .. table.concat(t, ", ") .. "}")
+end
 
-local text = ""
-compiler("print(42)", function (byte)
-  text = text .. string.char(byte)
-end)
-print(text)
+show()
+remove(t)
+show()
+remove(t, 2)
+show()

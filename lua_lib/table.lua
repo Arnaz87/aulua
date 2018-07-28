@@ -65,3 +65,28 @@ function table:insert (pos, value)
   end
   self[pos] = value
 end
+
+function table.move (a1, f, e, t , a2)
+  a2 = a2 or a1
+  if t > e or t <= f then
+    while f <= e do
+      a2[t] = a1[f]
+      t, f = t+1, f+1
+    end
+  else
+    t = t + (e-f)
+    while e >= f do
+      a2[t] = a1[e]
+      t, e = t-1, e-1
+    end
+  end
+  return a2
+end
+
+function table:remove (pos)
+  local len = #self
+  if pos ~= nil and pos ~= len and pos ~= len+1 then
+    table.move(self, pos, len, pos-1)
+  end
+  self[len] = nil
+end
