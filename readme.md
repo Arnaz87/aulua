@@ -1,22 +1,24 @@
 # Lua cobre compiler
 
-Compiles **Lua 5.3** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm). Written in Lua. It is not yet able to compile itself, and the performance is currently comparable to a 4 year old executing the machine instructions.
+Compiles **Lua 5.3** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm). Written in Lua. It can compile itself already, but the performance is comparable to a 4 year old executing the instructions.
+
+You can play with it [here](http://arnaud.com.ve/cobre/), working with the Javascript [implementation](https://github.com/Arnaz87/cobreweb) of Cobre.
 
 **Lisence**: This project is free software, published under the
   [MIT License](https://opensource.org/licenses/MIT)
 
 # Usage
 
-First you need to compile the Cobre library with [Culang](https://github.com/Arnaz87/culang), then run `bash build.sh install`, this will compile all source files including the lua code, and install them in the system.
+First you need [Culang](https://github.com/Arnaz87/culang) installed to compile the core library, then run `bash build.sh install`, this will compile all source files, both lua and culang code, and install them in the system.
 
-The command `lua culua/init.lua test.lua` will compile test.lua into a cobre module `test`, then you can run `cobre test` to execute it (will print 42). 
+The command `lua culua/init.lua test.lua` will compile test.lua into a cobre module `test`, then you can run `cobre test` to execute it.
 
 The compiler is also compiled and installed as a cobre module itself, but currently does not support file reading, so it can only be used as a library, not as a standalone utility.
 
 # Missing features
 
 - Almost all of the standard library
-- Correct module loading, they are executed everytime they are 'require'd
+- Correct module loading, they are executed everytime they are `require`d
 - floats
 - the math library
 - the utf8 library
@@ -24,8 +26,8 @@ The compiler is also compiled and installed as a cobre module itself, but curren
 - table equality
 
 - TABLE INDEXING IS FREAKING LINEAR TIME!
-- GETTING A TABLE LENGTH IS EXPONENTIAL!
-- Please use a proper hashmap implementation.
+- GETTING A TABLE LENGTH IS CUADRATIC!
+- Please use a proper hashmap.
 - string.sub is linear, because Cobre doesn't have yet substring extraction
 
 # Incompatibilities with standard Lua
