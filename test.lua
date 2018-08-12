@@ -1,11 +1,5 @@
+fi = io.open("test.lua")
+s = fi:read(10)
 
-local t = {"a", "b", "c", "d", "e"}
-local function show ()
-  print("{" .. table.concat(t, ", ") .. "}")
-end
-
-show()
-remove(t)
-show()
-remove(t, 2)
-show()
+fo = io.open("lol", "w")
+fo:write(s)

@@ -3,6 +3,7 @@ mkdir -p dist
 
 MAIN=culua/init.lua
 
+cobre culang lua.cu dist/lua
 lua $MAIN -o dist/ lua_lib/table.lua
 lua $MAIN -o dist/ lua_lib/string.lua
 lua $MAIN -o dist/ lua_lib/pattern.lua
@@ -18,7 +19,6 @@ lua $MAIN -o dist/ culua/write.lua
 lua $MAIN -o dist/ culua/compile.lua
 lua $MAIN -o dist/culua culua/init.lua
 
-cobre culang lua.cu dist/lua
 
 if [ "$1" == "install" ]; then
   cd dist

@@ -1,20 +1,4 @@
 
-local create_basic_items
-
-function create_compiler_state ()
-  modules = {}
-  types = {}
-  funcs = {}
-
-  metadata = {}
-  sourcemap = {"source map"}
-
-  constants = {}
-  constant_cache = {}
-
-  create_basic_items()
-end
-
 Module = {}
 Module.__index = Module
 
@@ -155,7 +139,7 @@ function constant (value)
   return cns
 end
 
-function create_basic_items ()
+local function create_basic_items ()
   int_m = module("cobre\x1fint")
   bool_m = module("cobre\x1fbool")
   str_m = module("cobre\x1fstring")
@@ -219,4 +203,18 @@ function create_basic_items ()
     ["-"] = lua_m:func("neg", {any_t}, {any_t}),
     ["#"] = lua_m:func("length", {any_t}, {any_t}),
   }
+end
+
+function create_compiler_state ()
+  modules = {}
+  types = {}
+  funcs = {}
+
+  metadata = {}
+  sourcemap = {"source map"}
+
+  constants = {}
+  constant_cache = {}
+
+  create_basic_items()
 end

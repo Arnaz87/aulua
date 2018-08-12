@@ -12,13 +12,6 @@ if _CU_VERSION then
       end
     end
   }
-  function table.move (a1, f, e, t, a2)
-    if not a2 then error("cannot move into same table") end
-    for i = f, e do
-      a2[t] = a1[i]
-      t = t+1
-    end
-  end
 end
 
 function Function:create_upval_info ()

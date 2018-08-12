@@ -6,6 +6,8 @@ import cobre.system {
   void error (string);
 }
 
+import cobre.buffer { type buffer; }
+
 import cobre.string {
   string itos (int);
   
@@ -14,6 +16,9 @@ import cobre.string {
   char, int charat(string, int);
   string add (string, char) as addch;
   char newchar (int);
+
+  string `new` (buffer) as newstr;
+  buffer tobuffer (string);
 }
 
 any anyInt (int x) { return x as any; }
@@ -237,7 +242,7 @@ string typestr (any a) {
   else if (testNil(a)) return "nil";
   else if (testBool(a)) return "bool";
   else if (testFn(a)) return "function";
-  else return "unknown";
+  else return "userdata";
 }
 
 string tostr (any a) {
@@ -326,6 +331,16 @@ Stack call (any _f, Stack args) {
 
 //======= Objects =======//
 
+struct UserDataInner {
+  any data;
+  Table? meta;
+}
+
+type UserData (UserDataInner);
+
+
+//======= Objects =======//
+
 bool checkKey (any a) { return testStr(a) || testInt(a); }
 
 struct Pair { any key; any val; }
@@ -408,6 +423,7 @@ Table? get_metatable (any a) {
     if (meta.isnull()) return new Table?();
     return (meta.get() as Table) as Table?;
   }
+  if (a is UserData) return ((a as UserData) as UserDataInner).meta;
   if (testStr(a)) return State.string_meta as Table?;
   return new Table?();
 }
@@ -466,10 +482,11 @@ struct StateT {
   Table _G;
   Table string;
   Table string_meta;
+  Table file_meta;
   Table loaded;
 }
 
-StateT State = new StateT(false, emptyTable(), emptyTable(), emptyTable(), emptyTable());
+StateT State = new StateT(false, emptyTable(), emptyTable(), emptyTable(), emptyTable(), emptyTable());
 
 
 //======= Core Library =======//
@@ -619,33 +636,102 @@ import lua_lib.table { Stack lua_main (any) as table_main; }
 
 //======= IO and OS =======//
 
-/*import cobre.io {
+import cobre.io {
   type file as File;
   type mode as FileMode;
-  FileMode r();
+  FileMode r() as r_mode;
+  FileMode w() as w_mode;
+  FileMode a() as a_mode;
+  File open (string, FileMode);
+  buffer read (File, int);
+  bool eof (File);
+  void write (File, buffer);
+  void close (File);
 }
 
-File[] files = new File[]();
+File get_file (any a) {
+  if (a is UserData) {
+    UserDataInner ud = (a as UserData) as UserDataInner;
+    if (ud.data is File) {
+      return ud.data as File;
+    } else error("bad argument #1 to 'read' (file expected)");
+  } else error("bad argument #1 to 'read' (file expected, got "+typestr(a)+")");
+}
 
-Stack _strsub (Stack args) {
-  string s = simple_string(args.next(), "1", "string.sub");
-  int len = strlen(s);
+Stack _open (Stack args) {
+  string filename = simple_string(args.next(), "1", "io.open");
+  any _s = args.next();
+  string s = "";
 
-  int i = valid_start_index(simple_number(args.next(), "2", "string.sub"), len);
+  if (testNil(_s)) s = "r";
+  else if (_s is string) s = _s as string;
 
-  int j = len; any _j = args.next();
-  if (!testNil(_j)) j = valid_end_index(simple_number(_j, "3", "string.sub"), len);
+  FileMode m;
+  if      ((s == "r") || (s == "rb")) m = r_mode();
+  else if ((s == "w") || (s == "wb")) m = w_mode();
+  else if ((s == "a") || (s == "ab")) m = a_mode();
+  else error("bad argument #2 to 'io.open' (invalid mode)");
 
-  string s2 = "";
-  while (i <= j) {
-    char ch;
-    ch, i = charat(s,i);
-    s2 = addch(s2, ch);
+  File file = open(filename, m);
+  UserDataInner ud = new UserDataInner(file as any, State.file_meta as Table?);
+  return stackof((ud as UserData) as any);
+}
+import module newfn (_open) { Function `` () as __open; }
+
+Stack _read (Stack args) {
+  File file = get_file(args.next());
+  any b = args.next();
+
+  string str;
+
+  if (b is nil_t) b = "l" as any;
+
+  if (b is string) {
+    string fmt = b as string;
+    if (fmt == "a") {
+      str = "";
+      repeat:
+      buffer buf = read(file, 128);
+      str = str + newstr(buf);
+      if (!eof(file)) goto repeat;
+    } else if (fmt == "n") {
+      error("format 'n' not yet supported");
+    } else if (fmt == "l") {
+      error("format 'l' not yet supported");
+    } else if (fmt == "L") {
+      error("format 'L' not yet supported");
+    } else error("bad argument #2 to 'read' (invalid format)");
+  } else if (b is int) {
+    str = newstr(read(file, b as int));
+  } else error("bad argument #2 to 'read' (invalid format)");
+
+  return stackof(str as any);
+}
+import module newfn (_read) { Function `` () as __read; }
+
+Stack _write (Stack args) {
+  File file = get_file(args.next());
+
+  int i = 1;
+
+  string str = "";
+  while (args.more()) {
+    str = str + simple_string(args.next(), itos(i), "write");
+    i = i+1;
   }
 
-  return stackof(anyStr(s2));
+  write(file, tobuffer(str));
+
+  return newStack();
 }
-import module newfn (_strsub) { Function `` () as __strsub; }*/
+import module newfn (_write) { Function `` () as __write; }
+
+Stack _close (Stack args) {
+  File file = get_file(args.next());
+  close(file);
+  return newStack();
+}
+import module newfn (_close) { Function `` () as __close; }
 
 
 
@@ -760,6 +846,15 @@ any get_global () {
     // pack.lua: pack, packsize, unpack
     string_main(anyTable(State._G));
     pattern_main(anyTable(State._G));
+
+    Table io_tbl = emptyTable();
+    tbl.set("io" as any, io_tbl as any);
+    io_tbl.set("open" as any, __open() as any);
+
+    State.file_meta.set("__index" as any, State.file_meta as any);
+    State.file_meta.set("read" as any, __read() as any);
+    State.file_meta.set("write" as any, __write() as any);
+    State.file_meta.set("close" as any, __close() as any);
 
     // Missing libraries
     // io and os libraries, math
