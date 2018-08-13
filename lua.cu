@@ -4,6 +4,9 @@
 import cobre.system {
   void println (string);
   void error (string);
+  void exit (int);
+  int argc ();
+  string argv (int);
 }
 
 import cobre.buffer { type buffer; }
@@ -733,6 +736,19 @@ Stack _close (Stack args) {
 }
 import module newfn (_close) { Function `` () as __close; }
 
+Stack _exit (Stack args) {
+  any a = args.next();
+  int code = 0;
+  if (a is bool) {
+    if (a as bool) code = 0; else code = 1;
+  } else {
+    code = simple_number_or(a, 0, "1", "os.exit");
+  }
+  exit(code);
+  return newStack();
+}
+import module newfn (_exit) { Function `` () as __exit; }
+
 
 
 //======= String functions =======//
@@ -856,12 +872,26 @@ any get_global () {
     State.file_meta.set("write" as any, __write() as any);
     State.file_meta.set("close" as any, __close() as any);
 
+    Table os_tbl = emptyTable();
+    tbl.set("os" as any, os_tbl as any);
+    os_tbl.set("exit" as any, __exit() as any);
+
+
     // Missing libraries
     // io and os libraries, math
     // the table library can be made in pure lua
 
     // package is mostly useless in Cobre
     // I'm not sure if i'll implement coroutine, 
+
+    Table arg_tbl = emptyTable();
+    int i = 0;
+    while (i < argc()) {
+      arg_tbl[i as any] = argv(i) as any;
+      i = i+1;
+    }
+
+    tbl["arg" as any] = arg_tbl as any;
   }
   return anyTable(State._G);
 }

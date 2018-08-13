@@ -130,18 +130,18 @@ end
 
 -- Basic Items
 local function string_item (patt, next)
-  return function (str, i)
+  return function (str, i, captures)
     local section = str:sub(i, i + #patt - 1)
     if section == patt then
-      return next(str, i+#patt)
+      return next(str, i+#patt, captures)
     end
   end
 end
 local function class_item (class, next)
-  return function (str, i)
+  return function (str, i, captures)
     if i > #str then return end
     if class(str:byte(i)) then
-      return next(str, i+1)
+      return next(str, i+1, captures)
     end
   end
 end
@@ -149,23 +149,23 @@ local function end_item (str, i) return i-1 end
 
 -- repetitions
 local function more_or_zero (class, next)
-  return function (str, i)
+  return function (str, i, captures)
     local n = i
     while n <= #str and class(str:byte(n)) do
       n = n+1
     end
 
     while n >= i do
-      local result = next(str, n)
+      local result = next(str, n, captures)
       if result then return result end
       n = n-1
     end
   end
 end
 local function zero_or_more (class, next)
-  return function (str, i)
+  return function (str, i, captures)
     while true do
-      local result = next(str, i)
+      local result = next(str, i, captures)
       if result then return result end
       if i <= #str and class(str:byte(i)) then i = i+1
       else return end
@@ -173,12 +173,35 @@ local function zero_or_more (class, next)
   end
 end
 local function one_or_zero (class, next)
-  return function (str, i)
+  return function (str, i, captures)
     if class(str:byte(i)) then
-      local result = next(str, i+1)
+      local result = next(str, i+1, captures)
       if result then return result end
     end
-    return next(str, i)
+    return next(str, i, captures)
+  end
+end
+
+-- captures
+
+local function capture_pos (index, next)
+  return function (str, i, captures)
+    captures[index] = i
+    return next(str, i, captures)
+  end
+end
+
+local function capture_start (index, next)
+  return function (str, i, captures)
+    captures[index] = {start=i}
+    return next(str, i, captures)
+  end
+end
+
+local function capture_end (index, next)
+  return function (str, i, captures)
+    captures[index]["end"] = i - 1
+    return next(str, i, captures)
   end
 end
 
@@ -189,32 +212,48 @@ local function parse_pattern (patt, i)
     table.insert(seq, {type=type, value=value})
   end
 
+  local capture_index = 1
+  local index_stack = {}
+
   local str = ""
   while i <= #patt do
-    local class, _i = parse_class(patt, i)
-
-    if class then
-      if str ~= "" then
-        push("string", str)
-        str = ""
-      end
-      i = _i
+    if patt:sub(i, i+1) == "()" then
+      push("()", capture_index)
+      capture_index = capture_index + 1
+      i = i+2
+    elseif patt:charat(i) == "(" then
+      push("(", capture_index)
+      table.insert(index_stack, capture_index)
+      capture_index = capture_index + 1
+      i = i+1
+    elseif patt:charat(i) == ")" then
+      push(")", table.remove(index_stack))
+      i = i+1
     else
-      class = patt:charat(i)
-      i = i+1
-    end
+      local class, _i = parse_class(patt, i)
 
-    local ch = patt:charat(i)
-    if ch == "+" or ch == "*" or ch == "-" or ch == "?" then
-      if type(class) == "string" then
-        class = make_charset(class)
+      if class then
+        if str ~= "" then
+          push("string", str)
+          str = ""
+        end
+        i = _i
+      else
+        class = patt:charat(i)
+        i = i+1
       end
-      push(ch, class)
-      i = i+1
-    elseif type(class) == "string" then
-      str = str .. class
-    else push("class", class) end
 
+      local ch = patt:charat(i)
+      if ch == "+" or ch == "*" or ch == "-" or ch == "?" then
+        if type(class) == "string" then
+          class = make_charset(class)
+        end
+        push(ch, class)
+        i = i+1
+      elseif type(class) == "string" then
+        str = str .. class
+      else push("class", class) end
+    end
   end
 
   if str ~= "" then
@@ -237,6 +276,12 @@ local function parse_pattern (patt, i)
       item = zero_or_more(obj.value, item)
     elseif obj.type == "?" then
       item = one_or_zero(obj.value, item)
+    elseif obj.type == "()" then
+      item = capture_pos(obj.value, item)
+    elseif obj.type == "(" then
+      item = capture_start(obj.value, item)
+    elseif obj.type == ")" then
+      item = capture_end(obj.value, item)
     end
   end
 
@@ -279,7 +324,42 @@ assert(find("a1b2", "%w-%d") == 2)
 assert(not find("3", "%l+"))
 assert(find("a0", ".?%d") == 2)
 assert(find("0", ".?%d") == 1)
+
+local function capt (str, patt, expected)
+  local captures = {}
+  local pattern = parse_pattern(patt, 1)
+  pattern(str, 1, captures)
+
+  if #captures ~= #expected then goto err end
+  for i = 1, #captures do
+    local c = captures[i]
+    if type(c) == "table" then
+      c = str:sub(c.start, c["end"])
+    end
+    if c ~= expected[i] then goto err end
+  end
+
+  do return end
+  ::err::
+  error("failed " .. str .. " with pattern " .. patt)
+end
+
+capt("abc", "%w", {})
+capt("abc", "()%w()()", {1, 2, 2})
+capt("abc", "(%w)", {"a"})
+capt("abcd", ".(%w).(%w)", {"b", "d"})
+capt("abc", "(%w(%w))", {"ab", "b"})
 --]]
+
+local function finish_captures (captures, str)
+  for i = 1, #captures do
+    local c = captures[i]
+    if type(c) == "table" then
+      captures[i] = str:sub(c.start, c["end"])
+    end
+  end
+  return table.unpack(captures)
+end
 
 function string:find (patt, init, plain)
 
@@ -322,18 +402,57 @@ function string:find (patt, init, plain)
     end
 
     local pattern = parse_pattern(patt, 1)
+    local captures = {}
     for i = init, max_start do
-      local endpos = pattern(self, i)
+      local endpos = pattern(self, i, captures)
       if endpos and endpos >= min_end then
-        return i, endpos
+        return i, endpos, finish_captures(captures, self)
       end
     end
   end
 end
 
 function string:match (patt, init, plain)
-  local a, b = self:find(patt, init, plain)
-  if a then return self:sub(a, b) end
+  local r = {self:find(patt, init, plain)}
+  if #r > 2 then
+    return table.unpack(r, 3)
+  elseif #r > 0 then
+    return self:sub(r[1], r[2])
+  end
+end
+
+function string.gsub (s, patt, repl, max_count)
+  local function sep (a, b, ...) return a, b, {...} end
+
+  local f
+  if type(repl) == "function" then
+    function f (_, ...) return repl(...) end
+  elseif type(repl) == "table" then
+    function f (_, k) return repl[k] end
+  elseif type(repl) == "string" then
+    function f (...)
+      local arg = {...}
+      local t = {["%"] = "%%"}
+      for i = 1, #arg do
+        t[tostring(i-1)] = arg[i]
+      end
+      return repl:gsub("%%([%d%%])", t)
+    end
+  else error("bad argument #3 to 'string.gsub' (string/function/table expected)") end
+
+  local i, r, count = 1, "", 0
+
+  while i < #s and (not max_count or count < max_count) do
+    local j, j2, captures = sep(s:find(patt, i))
+    if not j then break end
+
+    r = r .. s:sub(i, j-1) .. f(s:sub(j, j2), table.unpack(captures))
+    i = j2+1
+    count = count+1
+  end
+
+  r = r .. s:sub(i)
+  return r, count
 end
 
 --[[
@@ -349,4 +468,10 @@ do
   local a, b = ("+ -"):find("^[ \b\n\r\t\v]*")
   assert(a == 1) assert(b == 0)
 end
+
+print(("abc"):find("%w%w"))
+print(("abc"):find("%w(%w)"))
+print(("abc"):find("(()%w(%w))"))
+print(("abc"):match("%w%w"))
+print(("abc"):match("(()%w(%w))"))
 ]]

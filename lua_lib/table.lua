@@ -85,8 +85,17 @@ end
 
 function table:remove (pos)
   local len = #self
-  if pos ~= nil and pos ~= len and pos ~= len+1 then
-    table.move(self, pos, len, pos-1)
+  if not pos then pos = len end
+
+  -- The manual says that this removes the last element,
+  -- but the implementation does nothing
+  if pos == len+1 then return end -- follow the implementation
+  if pos > len then error("bad argument #1 to 'table.remove' (position out of bounds)") end
+
+  local v = self[pos]
+  if pos < len then
+    table.move(self, pos+1, len, pos)
   end
   self[len] = nil
+  return v
 end
