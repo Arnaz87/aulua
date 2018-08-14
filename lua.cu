@@ -19,6 +19,7 @@ import cobre.string {
   char, int charat(string, int);
   string add (string, char) as addch;
   char newchar (int);
+  string slice (string, int, int);
 
   string `new` (buffer) as newstr;
   buffer tobuffer (string);
@@ -43,13 +44,14 @@ bool getBool (any a) { return a as bool; }
 Table getTable (any a) { return a as Table; }
 Function getFn (any a) { return a as Function; }
 
-import cobre.array (any) {
-  type `` as AnyArr {
+import cobre.utils.arraylist (any) {
+  type `` as Array {
     any get (int);
     void push (any);
+    void set (int, any);
     int len ();
   }
-  AnyArr empty () as emptyAnyArr;
+  Array `new` () as newArray;
 }
 
 import cobre.function (Stack as in0, Stack as out0) {
@@ -68,7 +70,7 @@ type nil_t (unit_t);
 
 struct Stack {
   int pos;
-  AnyArr arr;
+  Array arr;
 
   any first (Stack this) {
     if (this.more())
@@ -110,7 +112,7 @@ struct Stack {
 }
 
 Stack newStack () {
-  return new Stack(0, emptyAnyArr());
+  return new Stack(0, newArray());
 }
 
 int atoi (string str) {
@@ -348,25 +350,68 @@ bool checkKey (any a) { return testStr(a) || testInt(a); }
 
 struct Pair { any key; any val; }
 
-import cobre.array (Pair) {
+import cobre.utils.arraylist (Pair) {
   type `` as PairArr {
     Pair get (int);
     void set (int, Pair);
     int len ();
     void push (Pair);
   }
-  PairArr empty () as emptyPairArr;
+  PairArr `new` () as emptyPairArr;
+}
+
+struct MapPair { string k; any v; }
+
+import cobre.utils.stringmap (any) {
+  type `` as Map {
+    any? get (string);
+    void set (string, any);
+    void delete (string);
+  }
+  Map `new` () as newMap;
+
+  type iterator {
+    MapPair? next ();
+  }
+  iterator `new\x1diterator` (Map) as newIter;
 }
 
 struct Table {
-  PairArr arr;
+  Map map;
+  Array arr;
+  PairArr pairs;
+
   MetaTable? meta;
 
+  iterator? iter;
+  string? lastKey;
+
+  // Notes: All keys are valid, only that raw userdata (any type not defined
+  // in this module) have no equality, so they can be set but not retrieved.
+
+  // Every key assigned is never removed, only it's value replaced with nil.
+
+  // Int keys greater than the length + 1 are assigned as generic keys, so
+  // when the array part catches up, that key will be stored twice.
+
+  // One iterator is mantained, so that for-in loops can run in hopefully
+  // constant time, but performance will degrade if next is used arbitrarily.
+
   any get (Table this, any key) {
-    if (!checkKey(key)) return nil();
+    if (key is int) {
+      int k = key as int;
+      if ((k > 0) && (k <= this.arr.len()))
+        return this.arr[k-1];
+    } else if (key is string) {
+      any? v = this.map[key as string];
+      if (v.isnull()) return nil();
+      else return v.get();
+    }
+
+    // Fallback
     int i = 0;
-    while (i < this.arr.len()) {
-      Pair pair = this.arr[i];
+    while (i < this.pairs.len()) {
+      Pair pair = this.pairs[i];
       if (equals(key, pair.key)) return pair.val;
       i = i+1;
     }
@@ -374,30 +419,116 @@ struct Table {
   }
 
   void set (Table this, any key, any value) {
-    if (!checkKey(key)) error("Lua: " + tostr(key) + " is not a valid key");
-    int i = 0;
-    while (i < this.arr.len()) {
-      Pair pair = this.arr[i];
-      if (equals(key, pair.key)) {
-        pair.val = value;
-        return;
+    if (key is int) {
+      int k = key as int;
+      if (k == (this.arr.len() + 1)) {
+        this.arr.push(value);
+      } else  if ((k > 0) && (k <= this.arr.len())) {
+        this.arr[k-1] = value;
+      } else goto fallback;
+    } else if (key is string) {
+      this.map[key as string] = value;
+    } else {
+      fallback:
+
+      int i = 0;
+      while (i < this.pairs.len()) {
+        Pair pair = this.pairs[i];
+        if (equals(key, pair.key)) {
+          pair.val = value;
+          return;
+        }
+        i = i+1;
       }
-      i = i+1;
+      Pair pair = new Pair(key, value);
+      this.pairs.push(pair);
     }
-    Pair pair = new Pair(key, value);
-    this.arr.push(pair);
+
   }
 
-  // TODO: This is temporary
+  // This is a complicated function...
   any nextKey (Table this, any key) {
-    if (testNil(key) && (this.arr.len() > 0))
-      return this.arr[0].key;
+
+    // If key is nil, just start iterating all keys
+    if (testNil(key)) {
+
+      // First integer key
+      if (this.arr.len() > 0) return 1 as any;
+
+      first_string_key:
+      iterator iter = newIter(this.map);
+      MapPair? pair = iter.next();
+
+      // at least one pair, otherwise fallback
+      if (!pair.isnull()) {
+        string k = pair.get().k;
+        this.iter = iter as iterator?;
+        this.lastKey = k as string?;
+        return k as any;
+      }
+
+      goto fallback;
+    }
+
+    if (key is int) {
+      int k = key as int;
+      if ((k > 0) && (k < this.arr.len())) {
+        return (k+1) as any;
+      } else if (k == this.arr.len()) {
+        // was last integer key
+        goto first_string_key;
+      } else {
+        // outside of array, probably stored elsewhere or nowhere
+        // but definitely not as string
+        goto fallback;
+      }
+    }
+
+    if (key is string) {
+      string k = key as string;
+
+      // Doesn't match current iterator. Find pair that matches
+      if (this.lastKey.isnull() || !(this.lastKey.get() == k)) {
+        iterator iter = newIter(this.map);
+        MapPair? pair = iter.next();
+
+        while (!pair.isnull()) {
+          // Found. Save the iterator and proceed
+          if (pair.get().k == k) {
+            this.iter = iter as iterator?;
+            this.lastKey = k as string?;
+            goto do_string;
+          }
+        }
+
+        // Not found, table doesn't have that key
+        return nil();
+      }
+
+      do_string:
+      MapPair? pair = this.iter.get().next();
+
+      if (pair.isnull()) {
+        // Was last key, return first callback key or finish
+        if (this.pairs.len() > 0)
+          return this.pairs[0].key;
+        else return nil();
+      } else {
+        string k = pair.get().k;
+        this.lastKey = k as string?;
+        return k as any;
+      }
+    }
+
+    fallback:
+    if (testNil(key) && (this.pairs.len() > 0))
+      return this.pairs[0].key;
     int i = 0;
-    while (i < this.arr.len()) {
-      Pair pair = this.arr[i];
+    while (i < this.pairs.len()) {
+      Pair pair = this.pairs[i];
       if (equals(key, pair.key)) {
-        if ((i+1) < this.arr.len())
-          return this.arr[i+1].key;
+        if ((i+1) < this.pairs.len())
+          return this.pairs[i+1].key;
         return nil();
       }
       i = i+1;
@@ -417,8 +548,10 @@ void table_append (any _t, any _n, Stack stack) {
 
 type MetaTable (Table);
 
-private Table emptyTable () { return new Table(emptyPairArr(), new MetaTable?()); }
-any newTable () { return anyTable(emptyTable()); }
+private Table emptyTable () { return new Table(
+  newMap(), newArray(), emptyPairArr(), new MetaTable?(), new iterator?(), new string?()
+); }
+any newTable () { return emptyTable() as any; }
 
 Table? get_metatable (any a) {
   if (testTable(a)) {
@@ -454,7 +587,7 @@ any get (any a, any k) {
 }
 
 void set (any t, any k, any v) {
-  if (testTable(t)) getTable(t).set(k, v);
+  if (t is Table) (t as Table).set(k, v);
   else error("Lua: tried to index a non-table value (" + tostr(t) + ")");
 }
 
@@ -462,17 +595,32 @@ any length (any a) {
   if (testStr(a)) return anyInt(strlen(getStr(a)));
   if (testTable(a)) {
     Table t = getTable(a);
+
     if (!t.meta.isnull()) {
       any len_fn = (t.meta.get() as Table).get(anyStr("__len"));
       if (!testNil(len_fn))
         return call(len_fn, stackof(a)).first();
     }
 
-    int i = 1;
-    while (true) {
-      any val = t.get(anyInt(i));
-      if (testNil(val)) return anyInt(i-1);
-      i = i+1;
+    // Tentative limit (remember the array is 0-index while lua is 1-index)
+    int i = t.arr.len() - 1;
+
+    if ((i >= 0) && (t.arr[i] is nil_t)) {
+      // False limit, must be lower
+      while (i >= 0) {
+        if (testNil(t.arr[i])) i = i-1;
+        else return (i+1) as any;
+      }
+    } else if (t.get((i+2) as any) is nil_t) {
+      return (i+1) as any;
+    } else {
+      // False limit, must be higher
+      i = i+3;
+      while (true) {
+        if (t.get(anyInt(i)) is nil_t)
+          return anyInt(i-1);
+        i = i+1;
+      }
     }
   }
   error("Lua: attempt to get length of a " + typestr(a) + " value");
@@ -777,12 +925,7 @@ Stack _strsub (Stack args) {
   int j = len; any _j = args.next();
   if (!testNil(_j)) j = valid_end_index(simple_number(_j, "3", "string.sub"), len);
 
-  string s2 = "";
-  while (i <= j) {
-    char ch;
-    ch, i = charat(s,i);
-    s2 = addch(s2, ch);
-  }
+  string s2 = slice(s, i, j+1);
 
   return stackof(anyStr(s2));
 }
