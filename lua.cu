@@ -279,6 +279,8 @@ bool equals (any a, any b) {
     Table ta = getTable(a);
     Table tb = getTable(b);
   }*/
+
+  // TODO: iplmement equality for tables and userdata (using explicit ids)
   return false;
 }
 
@@ -396,6 +398,8 @@ struct Table {
 
   // One iterator is mantained, so that for-in loops can run in hopefully
   // constant time, but performance will degrade if next is used arbitrarily.
+
+  // TODO: When cobre gets hashmaps, use a single hashmap for everything non-int
 
   any get (Table this, any key) {
     if (key is int) {
@@ -604,6 +608,8 @@ any length (any a) {
 
     // Tentative limit (remember the array is 0-index while lua is 1-index)
     int i = t.arr.len() - 1;
+
+    // TODO: Still needs logarithmic time, using binary search
 
     if ((i >= 0) && (t.arr[i] is nil_t)) {
       // False limit, must be lower
