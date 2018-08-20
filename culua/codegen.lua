@@ -1,6 +1,7 @@
 
 require("culua.helpers")
 require("culua.basics")
+require("culua.cobre_syntax")
 
 -- TODO: Add these modules to lua
 if _CU_VERSION then
@@ -95,7 +96,11 @@ function Function:build_upvals ()
     table.insert(argitems, { name = tostring(id), tp = any_t })
 
     -- Add the argument type to the constructor function
-    table.insert(self.upval_new_fn.ins, any_t.id)
+    local reg_tp = any_t
+    if reg.cu_type == "value" then
+      reg_tp = types[reg.type_id]
+    end
+    table.insert(self.upval_new_fn.ins, reg_tp.id)
 
     -- Add a nil value to the upvalue constructor call
     table.insert(self.upval_new_call, nil_reg)
@@ -118,7 +123,9 @@ function Function:get_local (name, as_upval)
   end
 
   if lcl then
-    if as_upval and not lcl.is_upval then
+
+    local cu_special = lcl.cu_type and lcl.cu_type ~= "value"
+    if as_upval and not lcl.is_upval and not cu_special then
       local id = #self.upvals
 
       -- Because the first "upvalue" is the parents upvalue object
@@ -128,9 +135,14 @@ function Function:get_local (name, as_upval)
       lcl.upval_level = self.level
       lcl.upval_id = id
 
+      local reg_t = any_t
+      if lcl.cu_type == "value" then
+        reg_t = types[reg.type_id]
+      end
+
       self.upval_accessors[id] = {
-        getter = self.upval_module:func("get"..id, {self.upval_type}, {any_t}),
-        setter = self.upval_module:func("set"..id, {self.upval_type, any_t}, {})
+        getter = self.upval_module:func("get"..id, {self.upval_type}, {reg_T}),
+        setter = self.upval_module:func("set"..id, {self.upval_type, reg_T}, {})
       }
 
       table.insert(self.upvals, lcl)
@@ -232,11 +244,21 @@ function Function:compile_require (node)
   return self:inst{fn, env}
 end
 
-function Function:compile_call (node)
+function Function:compile_call (node, accept_cu)
   local req = self:compile_require(node)
   if req then return req end
 
-  local base = self:compileExpr(node.base)
+  local base = self:compileExpr(node.base, true)
+  if base.cu_type then 
+    local result = self:compile_cu_call(node, base)
+    if not result.cu_type then
+      local stack = self:call(stack_f)
+      self:inst{push_f, stack, result}
+      return stack
+    elseif accept_cu then return result
+    else err("cannot use a cobre expression as value", node) end
+  end
+
   local f_reg = base
   if node.key then
     local key = self:compileExpr{type="str", value=node.key}
@@ -265,7 +287,7 @@ function Function:compile_call (node)
   return self:inst{call_f, f_reg, args, line=node.line}
 end
 
-function Function:compileExpr (node)
+function Function:compileExpr (node, accept_cu)
   local tp = node.type
   if tp == "const" then
     local f
@@ -285,7 +307,13 @@ function Function:compileExpr (node)
   elseif tp == "var" then
     local lcl = self:get_local(node.name)
     if lcl then
-      return self:inst{"var", lcl}
+      if lcl.cu_type then
+        if not accept_cu then
+          err("cannot use a cobre expression as value", node)
+        end
+        if lcl.cu_type ~= "value" then return lcl end
+      end
+      return self:inst{"var", lcl, cu_type=lcl.cu_type, type_id=lcl.type_id}
     else
       local env = self:get_local("_ENV")
       if not env then err("local \"_ENV\" not in sight", node) end
@@ -356,7 +384,11 @@ function Function:compileExpr (node)
     end
     return table
   elseif tp == "call" then
-    local result = self:compile_call(node)
+    local result = self:compile_call(node, accept_cu)
+    if result.regs and #result.regs > 0 then
+      return result.regs[1]
+    end
+    if result.cu_type then return result end
     return self:inst{first_f, result}
   else err("expression " .. tp .. " not supported", node) end
 end
@@ -370,30 +402,64 @@ function Function:assign (vars, values, line)
 
     if i == #values and i < #vars then
       if value.type == "call" then
-        stack = self:compile_call(value)
+        stack = self:compile_call(value, true)
       elseif value.type == "vararg" then
         stack = self:inst{copystack_f, self:get_vararg()}
       end
     end
 
     if stack then
-      reg = self:call(next_f, stack)
+      if stack.regs then
+        -- This is a result from a cobre function, which can have
+        -- multiple results. Go through each of them or use nils
+        reg = stack.regs[i + 1 - #values]
+        if not reg then
+          reg = self:call(nil_f)
+        end
+      elseif stack.cu_type then
+        reg, stack = stack, nil
+      else 
+        reg = self:call(next_f, stack)
+      end
     elseif value then
 
       if var.repr then value.repr = var.repr
       elseif var.lcl then value.repr = var.lcl end
 
-      reg = self:compileExpr(value)
+      local accept_cu = false
+
+      if var.lcl then accept_cu = true end
+      if type(var) == "string" then
+        local lcl = self:get_local(var)
+        if lcl and lcl.cu_type then
+          accept_cu = true
+        end
+      end
+
+      reg = self:compileExpr(value, accept_cu)
     else reg = self:call(nil_f) end
 
     if var then
       if var.lcl then
-        self.scope.locals[var.lcl] = self:inst{"local", reg}
+        if not reg.cu_type then
+          reg = self:inst{"local", reg}
+        end
+        self.scope.locals[var.lcl] = reg
       elseif var.base then
         self:inst{set_f, var.base, var.key, reg}
       else
         local lcl = self:get_local(var)
         if lcl then
+          -- Type checking
+          if lcl.cu_type then
+            if not reg.cu_type then
+              error("attempt to assign a lua expression to a typed local, at line " .. line)
+            elseif reg.type_id ~= lcl.type_id then
+              local src = types[reg.type_id+1].name
+              local tgt = types[lcl.type_id+1].name
+              error("attempt to assign a " .. src .. " to a " .. tgt .. " local, at line " .. line)
+            end
+          end
           self:inst{"set", lcl, reg, line=line}
         else
           local env = self:get_local("_ENV")
@@ -542,7 +608,7 @@ function Function:compileStmt (node)
       vars[i] = {lcl=name}
     end
     self:assign(vars, node.values, node.line)
-  elseif tp == "call" then self:compile_call(node)
+  elseif tp == "call" then self:compile_call(node, true)
   elseif tp == "assignment" then
     local vars = {}
     for i, var in ipairs(node.lhs) do
@@ -718,8 +784,16 @@ function Function:transform ()
       if #f.outs == 1 then
         inst.reg = reginc()
       elseif #f.outs > 1 then
-        error("Function with multiple returns?")
+        inst.reg = regcount
+        regcount = regcount + #f.outs
       end
+
+      if inst.regs then
+        for i, reg in ipairs(inst.regs) do
+          reg.reg = inst.reg + i - 1
+        end
+      end
+
       self:inst(inst)
     else self:inst(inst) end
   end
@@ -754,6 +828,8 @@ return function (ast, filename)
   -- true ENV, cannot be assigned because a lua identifier with a point is not
   -- valid. To be used when requiring
   lua_main.scope.locals[".ENV"] = lua_main:inst{"local", {reg=0}}
+
+  lua_main.scope.locals["_CU_IMPORT"] = {cu_type="import"}
 
   lua_main:compileBlock(ast)
   if #ast == 0 or ast[#ast].type ~= "return" then
