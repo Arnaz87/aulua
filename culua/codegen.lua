@@ -91,15 +91,16 @@ function Function:build_upvals ()
 
   for _, reg in ipairs(self.upvals) do
     local id = reg.upval_id
-
-    -- Add a field to the type, by adding the corresponging item to the argument
-    table.insert(argitems, { name = tostring(id), tp = any_t })
-
-    -- Add the argument type to the constructor function
+    
     local reg_tp = any_t
     if reg.cu_type == "value" then
       reg_tp = types[reg.type_id]
     end
+
+    -- Add a field to the type, by adding the corresponging item to the argument
+    table.insert(argitems, { name = tostring(id), tp = reg_tp })
+
+    -- Add the argument type to the constructor function
     table.insert(self.upval_new_fn.ins, reg_tp.id)
 
     -- Add a nil value to the upvalue constructor call
@@ -141,8 +142,8 @@ function Function:get_local (name, as_upval)
       end
 
       self.upval_accessors[id] = {
-        getter = self.upval_module:func("get"..id, {self.upval_type}, {reg_T}),
-        setter = self.upval_module:func("set"..id, {self.upval_type, reg_T}, {})
+        getter = self.upval_module:func("get"..id, {self.upval_type}, {reg_t}),
+        setter = self.upval_module:func("set"..id, {self.upval_type, reg_t}, {})
       }
 
       table.insert(self.upvals, lcl)
@@ -341,9 +342,9 @@ function Function:compileExpr (node, accept_cu)
       local a = self:compileExpr(node.left)
       local r = self:inst{"local", a}
       if node.op == "or" then
-        self:inst{"jif", lbl, r}
+        self:inst{"jif", lbl, a}
       else
-        self:inst{"nif", lbl, r}
+        self:inst{"nif", lbl, a}
       end
       local b = self:compileExpr(node.right)
       self:inst{"set", r, b}
@@ -789,6 +790,12 @@ function Function:transform ()
       else self:inst(inst) end
     elseif f == "label" then
       self.labels[inst[2]] = #self.code
+    elseif f == "jif" or f == "nif" then
+      if not inst[3].cu_type then
+        inst[3] = self:inst{bool_f, inst[3]}
+        inst[3].reg = reginc()
+      end
+      self:inst(inst)
     elseif type(f) == "table" then
 
       if #inst-1 ~= #f.ins then

@@ -82,4 +82,4 @@ The method _build_ of cobre modules accepts a cobre module and returns another c
 
 The _get\_module_ method of cobre modules accepts a string literal and imports the module with that name in the target module.
 
-The function _\_CU\_LUA\_VALUE\_TO\_ANY_ converts a lua value to a cobre value with type _any_. It does not actually do any conversion because lua values are of type any, but this way lua values themselves can be passed to cobre functions.
+The function _\_CU\_VALUE_ converts a lua value to a cobre value with type _any_. It does not actually do any conversion because lua values are of type any, but this way lua values themselves can be passed to cobre functions.
