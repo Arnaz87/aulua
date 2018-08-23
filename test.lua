@@ -1,4 +1,6 @@
 
-local function f () return true end
+local o = {"a", "b"}
+o[0] = "foo"
+o[32] = "bar"
 
-if f() and true then print(":D") end
+for k, v in pairs(o) do print(k, v) end

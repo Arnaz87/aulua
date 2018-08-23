@@ -471,7 +471,10 @@ struct Table {
         return k as any;
       }
 
-      goto fallback;
+      first_other_key:
+      if (this.pairs.len() > 0)
+        return this.pairs[0].key;
+      else return nil();
     }
 
     if (key is int) {
@@ -482,8 +485,8 @@ struct Table {
         // was last integer key
         goto first_string_key;
       } else {
-        // outside of array, probably stored elsewhere or nowhere
-        // but definitely not as string
+        // outside of array, probably stored as other or not here
+        // but definitely not as a string
         goto fallback;
       }
     }
@@ -514,9 +517,7 @@ struct Table {
 
       if (pair.isnull()) {
         // Was last key, return first callback key or finish
-        if (this.pairs.len() > 0)
-          return this.pairs[0].key;
-        else return nil();
+        goto first_other_key;
       } else {
         string k = pair.get().k;
         this.lastKey = k as string?;
