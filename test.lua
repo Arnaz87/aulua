@@ -26,8 +26,11 @@ local charat = string_mod:get_function("charat", {string, int}, {char, int})
 local system = _CU_IMPORT("cobre", "system")
 local println = system:get_function("println", {string}, {})
 
+local li = 0
+
 local xd = string("xd")
 local ch, i = charat(xd, int(0))
+--ch, li = charat(xd, i) -- ERROR
 
 xd = addch(xd, ch)
 
@@ -36,3 +39,7 @@ xd = addch(xd, ch)
 
 println(xd)
 print(i:to_lua_value())
+
+local t = string:test("xd")
+--print(t) -- ERROR
+if t then print("Is a string") end

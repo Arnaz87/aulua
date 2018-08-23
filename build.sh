@@ -15,10 +15,10 @@ lua $MAIN -o dist/lua_parser lua_parser/init.lua
 lua $MAIN -o dist/ culua/helpers.lua
 lua $MAIN -o dist/ culua/basics.lua
 lua $MAIN -o dist/ culua/codegen.lua
+lua $MAIN -o dist/ culua/cobre_syntax.lua
 lua $MAIN -o dist/ culua/write.lua
 lua $MAIN -o dist/ culua/compile.lua
 lua $MAIN -o dist/culua culua/init.lua
-
 
 if [ "$1" == "install" ]; then
   cd dist

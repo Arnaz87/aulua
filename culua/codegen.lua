@@ -287,6 +287,16 @@ function Function:compile_call (node, accept_cu)
   return self:inst{call_f, f_reg, args, line=node.line}
 end
 
+function Function:compile_bool (node)
+  local value = self:compileExpr(node, true)
+  if not value.cu_type then
+    local bool_value = self:inst{bool_f, value, cu_type="value", type_id=bool_t.id}
+    return bool_value
+  elseif value.cu_type == "value" and value.type_id == bool_t.id then
+    return value
+  else err("cannot use a cobre expression as value", node) end
+end
+
 function Function:compileExpr (node, accept_cu)
   local tp = node.type
   if tp == "const" then
@@ -446,6 +456,9 @@ function Function:assign (vars, values, line)
         end
         self.scope.locals[var.lcl] = reg
       elseif var.base then
+        if reg.cu_type then
+          error("attempt to assign a typed expression to a table field, at line " .. line)
+        end
         self:inst{set_f, var.base, var.key, reg}
       else
         local lcl = self:get_local(var)
@@ -459,9 +472,14 @@ function Function:assign (vars, values, line)
               local tgt = types[lcl.type_id+1].name
               error("attempt to assign a " .. src .. " to a " .. tgt .. " local, at line " .. line)
             end
+          elseif reg.cu_type then
+            error("attempt to assign a typed expression to a lua local, at line " .. line)
           end
           self:inst{"set", lcl, reg, line=line}
         else
+          if reg.cu_type then
+            error("attempt to assign a typed expression to a lua global, at line " .. line)
+          end
           local env = self:get_local("_ENV")
           if not env then err("local \"_ENV\" not in sight", node) end
 
@@ -649,7 +667,7 @@ function Function:compileStmt (node)
     local if_end = self:lbl()
     for _, clause in ipairs(node.clauses) do
       local clause_end = self:lbl()
-      local cond = self:compileExpr(clause.cond)
+      local cond = self:compile_bool(clause.cond)
       self:inst{"nif", clause_end, cond}
 
       self:push_scope()
@@ -670,7 +688,7 @@ function Function:compileStmt (node)
     local endl = self:lbl()
     
     self:inst{"label", start} 
-    local cond = self:compileExpr(node.cond)
+    local cond = self:compile_bool(node.cond)
     self:inst{"nif", endl, cond}
     
     table.insert(self.loops, endl)
@@ -691,7 +709,7 @@ function Function:compileStmt (node)
 
     self:inst{"label", start} 
     self:compileBlock(node.body)
-    local cond = self:compileExpr(node.cond)
+    local cond = self:compile_bool(node.cond)
     self:inst{"nif", start, cond}
     self:inst{"label", endl}
 
@@ -771,10 +789,6 @@ function Function:transform ()
       else self:inst(inst) end
     elseif f == "label" then
       self.labels[inst[2]] = #self.code
-    elseif f == "jif" or f == "nif" then
-      inst[3] = self:inst{bool_f, inst[3]}
-      inst[3].reg = reginc()
-      self:inst(inst)
     elseif type(f) == "table" then
 
       if #inst-1 ~= #f.ins then

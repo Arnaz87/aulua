@@ -109,14 +109,8 @@ function Function:compile_cu_call (node, base)
         tp.test_any = mod:func("test", {any_t}, {bool_t})
       end
 
-      if not from_bool_f then
-        local mod = get_any_module_of(bool_t)
-        from_bool_f = mod:func("new", {bool_t}, {any_t})
-      end
-
       local value = self:compileExpr(node.values[1])
-      local r = self:inst{tp.test_any, value}
-      return self:inst{from_bool_f, r}
+      return self:inst{tp.test_any, value, cu_type="value", type_id=bool_t.id}
 
     else err("attempt to index '" .. node.key .. "' on a cobre type", node) end
 

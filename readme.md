@@ -60,9 +60,11 @@ The method _get\_type_ of cobre modules receives a string literal and imports th
 
 The method _get\_function_ of cobre modules receives the function name as a string literal, and two table literals with only implicit indices and cobre types as values, being the input and output types of the function respectively.
 
-Cobre types can be called with regular lua expressions to convert them to vtyped cobre values, although it can error.
+Cobre types can be called with regular lua expressions to convert them to typed cobre values, although it can error.
 
-The _test_ method of cobre types can be used to ensure an expression is indeed of that type before converting it to avoid errors.
+The _test_ method of cobre types can be used to ensure an expression is indeed of that type before converting it to avoid errors, it returns a _bool_ typed value.
+
+Cobre values of type _bool_ can be used as conditions in _if_, _while_ and _repeat_ statements, but not in logical expressions.
 
 Cobre functions can only be called with typed cobre values and return typed values as well.
 
@@ -72,8 +74,12 @@ Regular locals can only hold lua values, but locals which are assigned a typed v
 
 The method _to\_lua\_value_ of typed values convert them to regular lua values, which are cobre values of type _any_.
 
+The following are not yet implemented
+
 The function _\_CU\_MODULE_ accepts as argument a table literal, in which all indices are string literals and all values are either cobre modules, cobre types or cobre functions, and returns a cobre module.
 
 The method _build_ of cobre modules accepts a cobre module and returns another cobre module.
 
 The _get\_module_ method of cobre modules accepts a string literal and imports the module with that name in the target module.
+
+The function _\_CU\_LUA\_VALUE\_TO\_ANY_ converts a lua value to a cobre value with type _any_. It does not actually do any conversion because lua values are of type any, but this way lua values themselves can be passed to cobre functions.

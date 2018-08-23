@@ -165,7 +165,7 @@ return function (_wbyte)
         for i = 2, #inst do
           wint(inst[i].reg)
         end
-      else error("Unsupported instruction: " .. f) end
+      else error("Unsupported instruction: " .. tostring(f)) end
     end
   end
 
