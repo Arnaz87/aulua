@@ -1,6 +1,4 @@
 
-local o = {"a", "b"}
-o[0] = "foo"
-o[32] = "bar"
+local o = {[0]="foo"}
 
 for k, v in pairs(o) do print(k, v) end

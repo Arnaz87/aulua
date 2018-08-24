@@ -479,9 +479,10 @@ struct Table {
 
     if (key is int) {
       int k = key as int;
-      if ((k > 0) && (k < this.arr.len())) {
+      int len = this.arr.len();
+      if ((k > 0) && (k < len)) {
         return (k+1) as any;
-      } else if (k == this.arr.len()) {
+      } else if ((k == len) && (len > 0)) {
         // was last integer key
         goto first_string_key;
       } else {
