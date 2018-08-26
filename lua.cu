@@ -143,7 +143,7 @@ bool isSpace (int code) {
   return 0<0; // false
 }
 
-int, bool parseNum (string str) {
+int, bool parseInt (string str) {
   // TODO:
   // Actually parse numbers like lua does. Whitespace is allowed before and
   // after the number, and it can be in any format lua accepts (integer,
@@ -166,7 +166,7 @@ int, bool getNum (any a) {
   } else if (testStr(a)) {
     string str = getStr(a);
     int value; bool b;
-    value, b = parseNum(str);
+    value, b = parseInt(str);
     return value, b;
   }
   return 0, false;
@@ -185,45 +185,125 @@ int, int, bool getNums (any a, any b) {
 }
 
 int, int, bool getInts (any a, any b) {
-  if (testInt(a)) if (testInt(b)) {
-    return getInt(a), getInt(b), 1>0;
+  if (a is int) {
+    if (b is int)
+      return a as int, b as int, true;
+    if (b is string) {
+
+    }
   }
   return 0, 0, false;
 }
 
+any parseNum (string s) {
+  int len = strlen(s);
+  int i = 0;
+  char ch;
+
+  while (i < len) {
+    ch, i = charat(s, i);
+    if (!(codeof(ch) == 32)) // space
+      goto digit;
+  }
+
+  int value = 0;
+
+  while (i < len) {
+    ch, i = charat(s, i);
+    digit:
+    if (codeof(ch) == 46) goto point;
+    if ((codeof(ch) > 57) || (codeof(ch) < 48))
+      goto endint;
+    value = (value*10) + (codeof(ch)-48);
+  }
+
+  endint:
+  while (i < len) {
+    ch, i = charat(s, i);
+    if (!(codeof(ch) == 32))
+      return nil();
+  }
+
+  return value as any;
+
+  point:
+
+  int digits = 0;
+
+  while (i < len) {
+    ch, i = charat(s, i);
+    if ((codeof(ch) > 57) || (codeof(ch) < 48))
+      goto endflt;
+    value = (value*10) + (codeof(ch)-48);
+    digits = digits + 1;
+  }
+  
+  endflt:
+  while (i < len) {
+    ch, i = charat(s, i);
+    if (!(codeof(ch) == 32))
+      return nil();
+  }
+
+  float fval = itof(value);
+  while (digits > 0) {
+    fval = fval / itof(10);
+    digits = digits - 1;
+  }
+
+  return fval as any;
+}
+
+float, bool getFloat (any a) {
+  if (a is float) return a as float, true;
+  if (a is int) return itof(a as int), true;
+  if (a is string) {
+    any an = parseNum(a as string);
+    if (an is float) return an as float, true;
+    if (an is int) return itof(an as int), true;
+  }
+  return itof(0), false;
+}
+
+float, float, bool getFloats (any a, any b) {
+  float af, bf; bool t;
+  af, t = getFloat(a);
+  if (!t) return af, af, false;
+  bf, t = getFloat(b);
+  return af, bf, t;
+}
+
 any add (any a, any b) {
-  bool it; int ia, ib;
-  ia, ib, it = getInts(a, b);
-  if (it) return anyInt(ia + ib);
-  ia, ib, it = getNums(a, b);
-  if (it) return anyInt(ia + ib);
+  if ((a is int) && (b is int))
+    return ((a as int) + (b as int)) as any;
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return (fa + fb) as any;
   error("Lua: attempt to perform arithmetic on a non-numeric value");
 }
 
 any sub (any a, any b) {
-  bool it; int ia, ib;
-  ia, ib, it = getInts(a, b);
-  if (it) return anyInt(ia - ib);
-  ia, ib, it = getNums(a, b);
-  if (it) return anyInt(ia - ib);
+  if ((a is int) && (b is int))
+    return ((a as int) - (b as int)) as any;
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return (fa - fb) as any;
   error("Lua: attempt to perform arithmetic on a non-numeric value");
 }
 
 any mul (any a, any b) {
-  bool it; int ia, ib;
-  ia, ib, it = getInts(a, b);
-  if (it) return anyInt(ia * ib);
-  ia, ib, it = getNums(a, b);
-  if (it) return anyInt(ia * ib);
+  if ((a is int) && (b is int))
+    return ((a as int) * (b as int)) as any;
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return (fa * fb) as any;
   error("Lua: attempt to perform arithmetic on a non-numeric value");
 }
 
 any div (any a, any b) {
-  bool it; int ia, ib;
-  ia, ib, it = getInts(a, b);
-  if (it) return anyInt(ia / ib);
-  ia, ib, it = getNums(a, b);
-  if (it) return anyInt(ia / ib);
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return (fa / fb) as any;
   error("Lua: attempt to perform arithmetic on a non-numeric value");
 }
 
@@ -243,7 +323,7 @@ export anyFn as function;
 string typestr (any a) {
   if (testTable(a)) return "table";
   else if (testStr(a)) return "string";
-  else if (testInt(a)) return "number";
+  else if ((a is float) || testInt(a)) return "number";
   else if (testNil(a)) return "nil";
   else if (testBool(a)) return "bool";
   else if (testFn(a)) return "function";
@@ -252,6 +332,7 @@ string typestr (any a) {
 
 string tostr (any a) {
   if (testStr(a)) return getStr(a);
+  else if (a is float) return ftos(a as float);
   else if (testInt(a)) return itos(getInt(a));
   else if (testBool(a)) {
     if (getBool(a))
@@ -707,10 +788,10 @@ Stack _tostring (Stack args) { return stackof(anyStr(tostr(args.next()))); }
 import module newfn (_tostring) { Function `` () as __tostring; }
 
 Stack _tonumber (Stack args) {
-  int n; bool b;
-  n, b = getNum(args.next());
-  if (b) return stackof(anyInt(n));
-  else return stackof(nil());
+  any a = args.next();
+  if ((a is int) || (a is float)) return stackof(a);
+  if (a is string) return stackof(parseNum(a as string));
+  return newStack();
 }
 import module newfn (_tonumber) { Function `` () as __tonumber; }
 

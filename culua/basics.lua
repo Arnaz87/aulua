@@ -132,8 +132,9 @@ function constant (value)
     local str = const_call(rawstr_f, raw)
     cns = const_call(anystr_f, str)
   elseif type(value) == "number" then
-    local raw = raw_const("int", value)
-    cns = const_call(anyint_f, raw)
+    local raw = raw_const("bin", tostring(value))
+    local str = const_call(rawstr_f, raw)
+    cns = const_call(parsenum_f, str)
   end
   constant_cache[value] = cns
   return cns
@@ -182,6 +183,8 @@ local function create_basic_items ()
   table_append_f = lua_m:func("table_append", {any_t, any_t, stack_t}, {})
   get_f = lua_m:func("get", {any_t, any_t}, {any_t})
   set_f = lua_m:func("set", {any_t, any_t, any_t}, {})
+
+  parsenum_f = lua_m:func("parseNum", {string_t}, {any_t})
 
   binops = {
     ["+"] = lua_m:func("add", {any_t,any_t}, {any_t}),
