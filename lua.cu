@@ -115,84 +115,9 @@ Stack newStack () {
   return new Stack(0, newArray());
 }
 
-int atoi (string str) {
-  int value = 0;
-  int pos = 0;
-  while (pos < strlen(str)) {
-    char ch;
-    ch, pos = charat(str, pos);
-    int code = codeof(ch);
-    value = (value*10) + (code-48);
-  }
-  return value;
-}
-
-bool isDigit (int code) {
-  if (code >= 48) { // 0
-    if (code <= 57) { // 9
-      return true; // true
-    }
-  }
-  return 0<0; // false
-}
-
-bool isSpace (int code) {
-  if (code == 9)  { return true; } // \t
-  if (code == 10) { return true; } // \n
-  if (code == 32) { return true; } // ' '
-  return 0<0; // false
-}
-
-int, bool parseInt (string str) {
-  // TODO:
-  // Actually parse numbers like lua does. Whitespace is allowed before and
-  // after the number, and it can be in any format lua accepts (integer,
-  // decimal, scientific notation, hexadecimal and hexadecimal scientific)
-  int value = 0;
-  int pos = 0;
-  int state = 0;
-  while (pos < strlen(str)) {
-    char ch;
-    ch, pos = charat(str, pos);
-    int code = codeof(ch);
-    value = (value*10) + (code-48);
-  }
-  return value, true;
-}
-
-int, bool getNum (any a) {
-  if (testInt(a)) {
-    return getInt(a), true;
-  } else if (testStr(a)) {
-    string str = getStr(a);
-    int value; bool b;
-    value, b = parseInt(str);
-    return value, b;
-  }
-  return 0, false;
-}
-
-int, int, bool getNums (any a, any b) {
-  int ia, ib; bool t;
-  ia, t = getNum(a);
-  if (t) {
-    ib, t = getNum(b);
-    if (t) {
-      return ia, ib, true;
-    }
-  }
-  return 0, 0, false;
-}
-
-int, int, bool getInts (any a, any b) {
-  if (a is int) {
-    if (b is int)
-      return a as int, b as int, true;
-    if (b is string) {
-
-    }
-  }
-  return 0, 0, false;
+bool isSpace (char ch) {
+  int code = codeof(ch); // \t \n ' '
+  return (code == 9) || (code == 10) || (code == 32);
 }
 
 any parseNum (string s) {
@@ -200,58 +125,142 @@ any parseNum (string s) {
   int i = 0;
   char ch;
 
+  int value = 0;
+  int anydigit = false;
+
+  // Skip whitespace, fail or start hex
   while (i < len) {
     ch, i = charat(s, i);
-    if (!(codeof(ch) == 32)) // space
-      goto digit;
+    if (codeof(ch) == 48) { // '0'
+      ch, i = charat(s, i);
+      if ((codeof(ch) == 88) || (codeof(ch) == 120)) // Xx
+        goto hexadecimal;
+    }
+    if (!isSpace(ch)) goto digit;
   }
 
-  int value = 0;
+  hexadecimal:
+  while (i < len) {
+    ch, i = charat(s, i);
+    int c = codeof(ch);
+    //if (codeof(ch) == 46) goto decimals;
+    if ((c <= 57) && (c >= 48)) { // 0-9
+      value = (value*16) + (c-48);
+    } else if ((c <= 70) && (c >= 65)) { // A-F
+      value = (value*16) + (c-65) + 10;
+    } else if ((c >= 97) && (c <= 102)) { // a-f
+      value = (value*16) + (c-97) + 10;
+    } else goto endint;
+  }
 
+  // Decimal digits
   while (i < len) {
     ch, i = charat(s, i);
     digit:
-    if (codeof(ch) == 46) goto point;
-    if ((codeof(ch) > 57) || (codeof(ch) < 48))
-      goto endint;
-    value = (value*10) + (codeof(ch)-48);
+    int c = codeof(ch);
+    if ((c == 46) || (c == 69) || (c == 101)) // '.' 'E' 'e'
+      goto floatPart;
+    if ((c > 57) || (c < 48)) // not a digit
+      goto endint; // break
+    value = (value*10) + (c-48);
+    anydigit = true;
   }
 
   endint:
+
+  // Skip whitespace or fail
   while (i < len) {
     ch, i = charat(s, i);
-    if (!(codeof(ch) == 32))
-      return nil();
+    if (!isSpace(ch)) return nil();
   }
 
   return value as any;
 
-  point:
+  floatPart:
 
-  int digits = 0;
+  float fval;
+  float ten = itof(10);
 
-  while (i < len) {
-    ch, i = charat(s, i);
-    if ((codeof(ch) > 57) || (codeof(ch) < 48))
-      goto endflt;
-    value = (value*10) + (codeof(ch)-48);
-    digits = digits + 1;
+  if (codeof(ch) == 46) { // '.'
+    int digits = 0;
+
+    // Decimal fractional digits
+    while (i < len) {
+      ch, i = charat(s, i);
+      if ((codeof(ch) > 57) || (codeof(ch) < 48))
+        goto endflt; // break
+      value = (value*10) + (codeof(ch)-48);
+      digits = digits + 1;
+      anydigit = true;
+    }
+    endflt:
+
+    fval = itof(value);
+    while (digits > 0) {
+      fval = fval / ten;
+      digits = digits - 1;
+    }
+  } else fval = itof(value);
+
+  if ((codeof(ch) == 69) || (codeof(ch) == 101)) { // Ee
+
+    bool positive = true;
+    int expval = 0;
+
+    ch, i = charat(s, i); // skip 'e'
+
+    if (codeof(ch) == 45) { // '-'
+      ch, i = charat(s, i); // advance
+      positive = false;
+    } else if (codeof(ch) == 43) { // '+'
+      ch, i = charat(s, i); // also advance
+    }
+
+    // At least 1 digit is required
+    if ((codeof(ch) > 57) || (codeof(ch) < 48)) return nil();
+    goto expdigit;
+
+    while (i < len) {
+      ch, i = charat(s, i);
+      expdigit:
+      if ((codeof(ch) > 57) || (codeof(ch) < 48))
+        goto endexp; // break
+      expval = (expval*10) + (codeof(ch)-48);
+    }
+    endexp:
+
+    if (positive) {
+      while (expval > 0) {
+        fval = fval * ten;
+        expval = expval - 1;
+      }
+    } else {
+      while (expval > 0) {
+        fval = fval / ten;
+        expval = expval - 1;
+      }
+    }
   }
+
+  if (!anydigit) return nil();
   
-  endflt:
   while (i < len) {
     ch, i = charat(s, i);
-    if (!(codeof(ch) == 32))
-      return nil();
-  }
-
-  float fval = itof(value);
-  while (digits > 0) {
-    fval = fval / itof(10);
-    digits = digits - 1;
+    if (!isSpace(ch)) return nil();
   }
 
   return fval as any;
+}
+
+int, bool getNum (any a) {
+  if (a is int) return a as int, true;
+  //if (a is float) return ftoi(a as float), true;
+  if (a is string) {
+    a = parseNum(a as string);
+    if (a is int) return a as int, true;
+    //if (a is float) return ftoi(a as float), true;
+  }
+  return 0, false;
 }
 
 float, bool getFloat (any a) {
