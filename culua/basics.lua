@@ -191,7 +191,7 @@ local function create_basic_items ()
     ["-"] = lua_m:func("sub", {any_t,any_t}, {any_t}),
     ["*"] = lua_m:func("mul", {any_t,any_t}, {any_t}),
     ["/"] = lua_m:func("div", {any_t,any_t}, {any_t}),
-    ["//"] = lua_m:func("div", {any_t,any_t}, {any_t}),
+    ["//"] = lua_m:func("idiv", {any_t,any_t}, {any_t}),
     [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
     ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
     ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),
@@ -203,7 +203,7 @@ local function create_basic_items ()
 
   unops = {
     ["not"] = lua_m:func("not", {any_t}, {any_t}),
-    ["-"] = lua_m:func("neg", {any_t}, {any_t}),
+    ["-"] = lua_m:func("unm", {any_t}, {any_t}),
     ["#"] = lua_m:func("length", {any_t}, {any_t}),
   }
 end

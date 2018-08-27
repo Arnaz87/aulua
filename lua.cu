@@ -252,34 +252,45 @@ any parseNum (string s) {
   return fval as any;
 }
 
-int, bool getNum (any a) {
-  if (a is int) return a as int, true;
-  //if (a is float) return ftoi(a as float), true;
-  if (a is string) {
-    a = parseNum(a as string);
-    if (a is int) return a as int, true;
-    //if (a is float) return ftoi(a as float), true;
-  }
-  return 0, false;
-}
-
-float, bool getFloat (any a) {
-  if (a is float) return a as float, true;
-  if (a is int) return itof(a as int), true;
-  if (a is string) {
-    any an = parseNum(a as string);
-    if (an is float) return an as float, true;
-    if (an is int) return itof(an as int), true;
-  }
-  return itof(0), false;
+any getNum (any a) {
+  if ((a is int) || (a is float)) return a;
+  if (a is string) return parseNum(a as string);
+  return nil();
 }
 
 float, float, bool getFloats (any a, any b) {
-  float af, bf; bool t;
-  af, t = getFloat(a);
-  if (!t) return af, af, false;
-  bf, t = getFloat(b);
-  return af, bf, t;
+  float fa, fb;
+
+  if (a is float) fa = a as float;
+  else if (a is int) fa = itof(a as int);
+  else return itof(0), itof(0), false;
+
+  if (b is float) fb = b as float;
+  else if (b is int) fb = itof(b as int);
+  else return itof(0), itof(0), false;
+
+  return fa, fb, true;
+}
+
+private any arith (any a, any b, string key) {
+  Table? meta = get_metatable(a);
+  if (meta.isnull()) {
+    meta = get_metatable(b);
+    if (meta.isnull()) goto err;
+  }
+
+  any index = meta.get().get(key as any);
+  if (testFn(index)) {
+    Function f = getFn(index);
+    Stack args = newStack();
+    args.push(a);
+    args.push(b);
+    Stack result = f.apply(args);
+    return result.first();
+  }
+
+  err:
+  error("Lua: attempt to perform arithmetic on a " + typestr(a) + " value");
 }
 
 any add (any a, any b) {
@@ -288,7 +299,7 @@ any add (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa + fb) as any;
-  error("Lua: attempt to perform arithmetic on a non-numeric value");
+  return arith(a, b, "__add");
 }
 
 any sub (any a, any b) {
@@ -297,7 +308,7 @@ any sub (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa - fb) as any;
-  error("Lua: attempt to perform arithmetic on a non-numeric value");
+  return arith(a, b, "__sub");
 }
 
 any mul (any a, any b) {
@@ -306,14 +317,14 @@ any mul (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa * fb) as any;
-  error("Lua: attempt to perform arithmetic on a non-numeric value");
+  return arith(a, b, "__mul");
 }
 
 any div (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa / fb) as any;
-  error("Lua: attempt to perform arithmetic on a non-numeric value");
+  return arith(a, b, "__div");
 }
 
 any concat (any a, any b) {
@@ -408,11 +419,23 @@ any gt (any a, any b) { return anyBool(cmp(a, b) > 0); }
 any ge (any a, any b) { return anyBool(cmp(a, b) >= 0); }
 
 any not (any a) { return anyBool(!tobool(a)); }
-any neg (any a) {
-  int n; bool t;
-  n, t = getNum(a);
-  if (t) { return anyInt(0-n); }
-  error("Lua: attempt to perform arithmetic on a non-numeric value");
+any unm (any a) {
+  if (a is int) return (0 - (a as int)) as any;
+  if (a is float) return (itof(0) - (a as float)) as any;
+
+  Table? meta = get_metatable(a);
+  if (!meta.isnull()) {
+    any index = meta.get().get("__unm" as any);
+    if (testFn(index)) {
+      Function f = getFn(index);
+      Stack args = newStack();
+      args.push(a);
+      Stack result = f.apply(args);
+      return result.first();
+    }
+  }
+
+  error("Lua: attempt to perform arithmetic on a " + typestr(a) + " value");
 }
 
 Stack call (any _f, Stack args) {
@@ -747,9 +770,8 @@ private string simple_string (any a, string n, string fname) {
   error("Lua: bad argument #" + n + " to '" + fname + "' (string expected, got " + typestr(a) + ")");
 }
 private int simple_number (any a, string n, string fname) {
-  int x; bool t;
-  x, t = getNum(a);
-  if (t) return x;
+  any a = getNum(a);
+  if (a is int) return a as int;
   error("Lua: bad argument #" + n + " to '" + fname + "' (number expected, got " + typestr(a) + ")");
 }
 private int simple_number_or (any a, int d, string n, string fname) {
@@ -1062,6 +1084,58 @@ Stack _strchar (Stack args) {
 }
 import module newfn (_strchar) { Function `` () as __strchar; }
 
+
+
+//======= String operations =======//
+
+void str_arith_err (bool b) {
+  if (b) error("attempt to perform arithmetic on a string");
+}
+
+Stack _stradd (Stack args) {
+  any a = getNum(args.next());
+  any b = getNum(args.next());
+  if ((a is nil_t) || (b is nil_t))
+    error("attempt to perform arithmetic on a string");
+  return stackof(add(a, b));
+}
+import module newfn (_stradd) { Function `` () as __stradd; }
+
+Stack _strsub (Stack args) {
+  any a = getNum(args.next());
+  any b = getNum(args.next());
+  if ((a is nil_t) || (b is nil_t))
+    error("attempt to perform arithmetic on a string");
+  return stackof(sub(a, b));
+}
+import module newfn (_strsub) { Function `` () as __strsub; }
+
+Stack _strmul (Stack args) {
+  any a = getNum(args.next());
+  any b = getNum(args.next());
+  if ((a is nil_t) || (b is nil_t))
+    error("attempt to perform arithmetic on a string");
+  return stackof(mul(a, b));
+}
+import module newfn (_strmul) { Function `` () as __strmul; }
+
+Stack _strdiv (Stack args) {
+  any a = getNum(args.next());
+  any b = getNum(args.next());
+  if ((a is nil_t) || (b is nil_t))
+    error("attempt to perform arithmetic on a string");
+  return stackof(div(a, b));
+}
+import module newfn (_strdiv) { Function `` () as __strdiv; }
+
+Stack _strunm (Stack args) {
+  any a = getNum(args.next());
+  if (a is nil_t) error("attempt to perform arithmetic on a string");
+  return stackof(unm(a));
+}
+import module newfn (_strunm) { Function `` () as __strunm; }
+
+
 any get_global () {
   if (!State.ready) {
     // Do not attempt to initialize the state again
@@ -1093,6 +1167,13 @@ any get_global () {
     table_main(anyTable(State._G));
 
     State.string_meta.set(anyStr("__index"), anyTable(State.string));
+    State.string_meta.set(anyStr("__add"), __stradd() as any);
+    State.string_meta.set(anyStr("__sub"), __strsub() as any);
+    State.string_meta.set(anyStr("__mul"), __strmul() as any);
+    State.string_meta.set(anyStr("__div"), __strdiv() as any);
+    State.string_meta.set(anyStr("__unm"), __strunm() as any);
+    // idiv mod pow unm (unary minus)
+
     tbl.set(anyStr("string"), anyTable(State.string));
     State.string.set(anyStr("sub"), anyFn(__strsub()));
     State.string.set(anyStr("byte"), anyFn(__strbyte()));
