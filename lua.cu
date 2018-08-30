@@ -25,6 +25,13 @@ import cobre.string {
   buffer tobuffer (string);
 }
 
+import cobre.math {
+  float floor (float);
+  float trunc (float);
+  float mod (float, float) as fmod;
+  float pow (float base, float exponent) as fpow;
+}
+
 any anyInt (int x) { return x as any; }
 any anyStr (string x) { return x as any; }
 any anyTable (Table x) { return x as any; }
@@ -327,6 +334,48 @@ any div (any a, any b) {
   return arith(a, b, "__div");
 }
 
+any idiv (any a, any b) {
+  if ((a is int) && (b is int)) {
+    int ia = a as int, ib = b as int;
+    int r = ia / ib;
+    // Int division truncates, but lua division floors
+    // negative results are rounded the wrong way
+    if ((r > 0) || ((ia * ib) > 0) || ((r * ib) == ia))
+      return r as any;
+    return (r - 1) as any;
+  }
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return floor(fa / fb) as any;
+  return arith(a, b, "__idiv");
+}
+
+import cobre.int {
+  int mod (int, int) as imod;
+}
+
+any mod (any a, any b) {
+  if ((a is int) && (b is int)) {
+    int ia = a as int, ib = b as int;
+    int r = imod(ia, ib);
+    if ((r * ib) >= 0) return r as any;
+    return (r + ib) as any;
+  }
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (!t) return arith(a, b, "__mod");
+  float r = fmod(fa, fb);
+  if ((r * fb) >= itof(0)) return r as any;
+  return (r + fb) as any;
+}
+
+any pow (any a, any b) {
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return fpow(fa, fb) as any;
+  return arith(a, b, "__pow");
+}
+
 any concat (any a, any b) {
   return anyStr(tostr(a) + tostr(b));
 }
@@ -371,6 +420,9 @@ bool tobool (any a) {
 bool equals (any a, any b) {
   if (testInt(a) && testInt(b)) return getInt(a) == getInt(b);
   if (testStr(a) && testStr(b)) return getStr(a) == getStr(b);
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return fa == fb;
   if (testBool(a) && testBool(b)) {
     bool _a = getBool(a), _b = getBool(b);
     return (_a && _b) || (!_a && !_b);
@@ -1088,45 +1140,55 @@ import module newfn (_strchar) { Function `` () as __strchar; }
 
 //======= String operations =======//
 
-void str_arith_err (bool b) {
-  if (b) error("attempt to perform arithmetic on a string");
-}
-
-Stack _stradd (Stack args) {
+any, any str_get_nums (Stack args) {
   any a = getNum(args.next());
   any b = getNum(args.next());
   if ((a is nil_t) || (b is nil_t))
     error("attempt to perform arithmetic on a string");
+  return a, b;
+}
+
+Stack _stradd (Stack args) {
+  any a, b; a, b = str_get_nums(args);
   return stackof(add(a, b));
 }
 import module newfn (_stradd) { Function `` () as __stradd; }
 
 Stack _strsub (Stack args) {
-  any a = getNum(args.next());
-  any b = getNum(args.next());
-  if ((a is nil_t) || (b is nil_t))
-    error("attempt to perform arithmetic on a string");
+  any a, b; a, b = str_get_nums(args);
   return stackof(sub(a, b));
 }
 import module newfn (_strsub) { Function `` () as __strsub; }
 
 Stack _strmul (Stack args) {
-  any a = getNum(args.next());
-  any b = getNum(args.next());
-  if ((a is nil_t) || (b is nil_t))
-    error("attempt to perform arithmetic on a string");
+  any a, b; a, b = str_get_nums(args);
   return stackof(mul(a, b));
 }
 import module newfn (_strmul) { Function `` () as __strmul; }
 
 Stack _strdiv (Stack args) {
-  any a = getNum(args.next());
-  any b = getNum(args.next());
-  if ((a is nil_t) || (b is nil_t))
-    error("attempt to perform arithmetic on a string");
+  any a, b; a, b = str_get_nums(args);
   return stackof(div(a, b));
 }
 import module newfn (_strdiv) { Function `` () as __strdiv; }
+
+Stack _stridiv (Stack args) {
+  any a, b; a, b = str_get_nums(args);
+  return stackof(idiv(a, b));
+}
+import module newfn (_stridiv) { Function `` () as __stridiv; }
+
+Stack _strmod (Stack args) {
+  any a, b; a, b = str_get_nums(args);
+  return stackof(mod(a, b));
+}
+import module newfn (_strmod) { Function `` () as __strmod; }
+
+Stack _strpow (Stack args) {
+  any a, b; a, b = str_get_nums(args);
+  return stackof(pow(a, b));
+}
+import module newfn (_strpow) { Function `` () as __strpow; }
 
 Stack _strunm (Stack args) {
   any a = getNum(args.next());
@@ -1134,6 +1196,42 @@ Stack _strunm (Stack args) {
   return stackof(unm(a));
 }
 import module newfn (_strunm) { Function `` () as __strunm; }
+
+
+
+//======= Math =======//
+
+Stack _tointeger (Stack args) {
+  any a = args.next();
+  if (a is string) a = parseNum(a as string);
+  if (a is int) return stackof(a);
+  if (a is float) {
+    float fa = a as float;
+    float fr = fa - trunc(fa);
+    if (fr == itof(0)) return stackof(ftoi(fa) as any);
+  }
+  return newStack();
+}
+import module newfn (_tointeger) { Function `` () as __tointeger; }
+
+Stack _tofloat (Stack args) {
+  any a = args.next();
+  if (a is string) a = parseNum(a as string);
+  if (a is int) return stackof(itof(a as int) as any);
+  if (a is float) return stackof(a);
+  return newStack();
+}
+import module newfn (_tofloat) { Function `` () as __tofloat; }
+
+Stack _mathtype (Stack args) {
+  any a = args.next();
+  if (a is int) return stackof("integer" as any);
+  if (a is float) return stackof("float" as any);
+  return newStack();
+}
+import module newfn (_mathtype) { Function `` () as __mathtype; }
+
+import lua_lib.math { Stack lua_main (any) as math_main; }
 
 
 any get_global () {
@@ -1197,6 +1295,12 @@ any get_global () {
     Table os_tbl = emptyTable();
     tbl.set("os" as any, os_tbl as any);
     os_tbl.set("exit" as any, __exit() as any);
+
+    Table math_tbl = emptyTable();
+    tbl.set("math" as any, math_tbl as any);
+    math_tbl.set("tointeger" as any, __tointeger() as any);
+    math_tbl.set("tofloat" as any, __tofloat() as any);
+    math_main(State._G as any);
 
 
     // Missing libraries

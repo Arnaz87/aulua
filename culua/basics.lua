@@ -192,6 +192,8 @@ local function create_basic_items ()
     ["*"] = lua_m:func("mul", {any_t,any_t}, {any_t}),
     ["/"] = lua_m:func("div", {any_t,any_t}, {any_t}),
     ["//"] = lua_m:func("idiv", {any_t,any_t}, {any_t}),
+    ["%"] = lua_m:func("mod", {any_t,any_t}, {any_t}),
+    ["^"] = lua_m:func("pow", {any_t,any_t}, {any_t}),
     [".."] = lua_m:func("concat", {any_t,any_t}, {any_t}),
     ["=="] = lua_m:func("eq", {any_t,any_t}, {any_t}),
     ["~="] = lua_m:func("ne", {any_t,any_t}, {any_t}),

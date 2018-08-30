@@ -7,6 +7,7 @@ cobre culang lua.cu dist/lua
 lua $MAIN -o dist/ lua_lib/table.lua
 lua $MAIN -o dist/ lua_lib/string.lua
 lua $MAIN -o dist/ lua_lib/pattern.lua
+lua $MAIN -o dist/ lua_lib/math.lua
 
 lua $MAIN -o dist/ lua_parser/parser.lua
 lua $MAIN -o dist/ lua_parser/lexer.lua
