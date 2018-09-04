@@ -1,6 +1,6 @@
 # Lua cobre compiler
 
-Compiles **Lua 5.4** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm). Written in Lua. It can compile itself already.
+Compiles **Lua 5.4** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm). Written in itself in 6K lines of code.
 
 You can play with it [here](http://arnaud.com.ve/cobre/), working with the Javascript [implementation](https://github.com/Arnaz87/cobreweb) of Cobre.
 
