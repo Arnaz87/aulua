@@ -141,15 +141,15 @@ function constant (value)
 end
 
 local function create_basic_items ()
-  int_m = module("cobre\x1fint")
-  bool_m = module("cobre\x1fbool")
-  str_m = module("cobre\x1fstring")
+  int_m = module("auro\x1fint")
+  bool_m = module("auro\x1fbool")
+  str_m = module("auro\x1fstring")
   lua_m = module("lua")
   closure_m = module("closure")
   closure_m.from = lua_m
-  record_m = module("cobre\x1frecord")
-  any_m = module("cobre\x1fany")
-  buffer_m = module("cobre\x1fbuffer")
+  record_m = module("auro\x1frecord")
+  any_m = module("auro\x1fany")
+  buffer_m = module("auro\x1fbuffer")
 
   any_t = any_m:type("any")
   bool_t = bool_m:type("bool")

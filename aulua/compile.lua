@@ -1,8 +1,8 @@
 
 
 local Parser = require("lua_parser.parser")
-local codegen = require("culua.codegen")
-local write = require("culua.write")
+local codegen = require("aulua.codegen")
+local write = require("aulua.write")
 
 --[[ Example usage:
 

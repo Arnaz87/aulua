@@ -68,7 +68,7 @@ end
 local loud = false
 local showtrace = false
 
-if not _CU_VERSION then
+if not _AU_VERSION then
   for line in io.lines("lua_parser/test_parse.txt") do
     if line:find("LOUD") ~= nil then loud = true end
     if line:find("QUIT") ~= nil then break end
@@ -101,7 +101,7 @@ end
 
 
 loud = false
-if _CU_VERSION then loud = true end
+if _AU_VERSION then loud = true end
 
 local function test (str, expected)
   Parser.open(str)

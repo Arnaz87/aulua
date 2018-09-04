@@ -1,7 +1,7 @@
 
 
-function Function:compile_cu_call (node, base)
-  local tp = base.cu_type
+function Function:compile_au_call (node, base)
+  local tp = base.au_type
 
   function get_any_module_of (tp)
     if not tp.any_module then
@@ -15,31 +15,31 @@ function Function:compile_cu_call (node, base)
   end
 
   if tp == "import" then
-    if base.key then err("attempt to index '" .. node.key .. "' on _CU_IMPORT", node) end
+    if base.key then err("attempt to index '" .. node.key .. "' on _AU_IMPORT", node) end
     local names = {}
-    if #node.values < 1 then err("bad argument #1 for _CU_IMPORT (string literal expected)", node) end
+    if #node.values < 1 then err("bad argument #1 for _AU_IMPORT (string literal expected)", node) end
     for i, v in ipairs(node.values) do
       if v.type ~= "str" then
-        err("bad argument #" .. i .. " for _CU_IMPORT (string literal expected)", node)
+        err("bad argument #" .. i .. " for _AU_IMPORT (string literal expected)", node)
       end
       table.insert(names, v.value)
     end
     local mod = module(table.concat(names, "\x1f"))
-    return {cu_type="module", module_id=mod.id}
+    return {au_type="module", module_id=mod.id}
   elseif tp == "module" then
 
-    -- lua tables are 1-indexed, but cobre module ids start at 2 because 0
+    -- lua tables are 1-indexed, but auro module ids start at 2 because 0
     -- and 1 are reserved, so I have to subtract 1
     local mod = modules[base.module_id-1]
 
-    if not node.key then err("attempt to call a cobre module", node)
+    if not node.key then err("attempt to call a auro module", node)
 
     elseif node.key == "get_type" then
       if #node.values ~= 1 or node.values[1].type ~= "str" then
         err("bad arguments for get_type (string literal expected)", node)
       end
       local tp = mod:type(node.values[1].value)
-      return {cu_type="type", type_id=tp.id}
+      return {au_type="type", type_id=tp.id}
 
     elseif node.key == "get_function" then
 
@@ -56,8 +56,8 @@ function Function:compile_cu_call (node, base)
             err("bad argument #"..index.." for get_function (field keys are not allowed)", node)
           end
           local value = self:compileExpr(item.value, true)
-          if value.cu_type ~= "type" then
-            err("bad argument #"..index.." for get_function (cobre type expected at field #"..i..")", node)
+          if value.au_type ~= "type" then
+            err("bad argument #"..index.." for get_function (auro type expected at field #"..i..")", node)
           end
 
           table.insert(list, types[value.type_id+1])
@@ -77,9 +77,9 @@ function Function:compile_cu_call (node, base)
       local outs = create_type_list(3)
 
       local fn = mod:func(name, ins, outs)
-      return {cu_type="function", function_id=fn:id()}
+      return {au_type="function", function_id=fn:id()}
 
-    else err("attempt to index '" .. node.key .. "' on a cobre module", node)
+    else err("attempt to index '" .. node.key .. "' on a auro module", node)
     end
 
   elseif tp == "type" then
@@ -88,7 +88,7 @@ function Function:compile_cu_call (node, base)
     if not node.key then
 
       if #node.values ~= 1 then
-        err("bad arguments for cobre type (one argument expected)", node)
+        err("bad arguments for auro type (one argument expected)", node)
       end
 
       if not tp.from_any then
@@ -98,7 +98,7 @@ function Function:compile_cu_call (node, base)
 
       local value = self:compileExpr(node.values[1])
       local reg = self:inst{tp.from_any, value}
-      reg.cu_type = "value"
+      reg.au_type = "value"
       reg.type_id = tp.id
       return reg
 
@@ -110,14 +110,14 @@ function Function:compile_cu_call (node, base)
       end
 
       local value = self:compileExpr(node.values[1])
-      return self:inst{tp.test_any, value, cu_type="value", type_id=bool_t.id}
+      return self:inst{tp.test_any, value, au_type="value", type_id=bool_t.id}
 
-    else err("attempt to index '" .. node.key .. "' on a cobre type", node) end
+    else err("attempt to index '" .. node.key .. "' on a auro type", node) end
 
   elseif tp == "value" then
     local tp = types[base.type_id+1]
 
-    if not node.key then err("attempt to call a cobre value", node)
+    if not node.key then err("attempt to call a auro value", node)
     elseif node.key == "to_lua_value" then
       if #node.values > 0 then
         err("bad arguments for to_lua_value (no arguments expected)", node)
@@ -130,25 +130,25 @@ function Function:compile_cu_call (node, base)
 
       return self:inst{tp.to_any, base}
 
-    else err("attempt to index '" .. node.key .. "' on a cobre value", node) end
+    else err("attempt to index '" .. node.key .. "' on a auro value", node) end
 
   elseif tp == "function" then
-    if node.key then err("attempt to index '" .. node.key .. "' on a cobre function", node) end
+    if node.key then err("attempt to index '" .. node.key .. "' on a auro function", node) end
     local fn = funcs[base.function_id+1]
 
     if #node.values ~= #fn.ins then
-      err("bad arguments for cobre type (" .. #fn.ins .. " arguments expected)", node)
+      err("bad arguments for auro type (" .. #fn.ins .. " arguments expected)", node)
     end
 
-    local inst = {fn, cu_type="result", regs={}}
+    local inst = {fn, au_type="result", regs={}}
     for i, v in ipairs(node.values) do
       local value = self:compileExpr(v, true)
 
       local bad_name
-      if not value.cu_type then
+      if not value.au_type then
         bad_name = "lua value"
-      elseif value.cu_type ~= "value" then
-        bad_name = value.cu_type
+      elseif value.au_type ~= "value" then
+        bad_name = value.au_type
       elseif value.type_id ~= fn.ins[i] then
         bad_name = types[value.type_id+1].name
       end
@@ -162,11 +162,11 @@ function Function:compile_cu_call (node, base)
     end
 
     for i, tp_id in ipairs(fn.outs) do
-      inst.regs[i] = {cu_type="value", type_id=tp_id}
+      inst.regs[i] = {au_type="value", type_id=tp_id}
     end
 
     return self:inst(inst)
   end
 
-  err("unknown cu_type " .. tp, node)
+  err("unknown au_type " .. tp, node)
 end

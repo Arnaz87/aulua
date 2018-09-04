@@ -1,19 +1,7 @@
 
-require("culua.helpers")
-require("culua.basics")
-require("culua.cobre_syntax")
-
--- TODO: Add these modules to lua
-if _CU_VERSION then
-  math = {
-    max = function (a, b)
-      if a >= b
-      then return a
-      else return b
-      end
-    end
-  }
-end
+require("aulua.helpers")
+require("aulua.basics")
+require("aulua.auro_syntax")
 
 function Function:create_upval_info ()
   -- Every function has an upval type, which is a record with all the upvalues
@@ -93,7 +81,7 @@ function Function:build_upvals ()
     local id = reg.upval_id
     
     local reg_tp = any_t
-    if reg.cu_type == "value" then
+    if reg.au_type == "value" then
       reg_tp = types[reg.type_id]
     end
 
@@ -125,8 +113,8 @@ function Function:get_local (name, as_upval)
 
   if lcl then
 
-    local cu_special = lcl.cu_type and lcl.cu_type ~= "value"
-    if as_upval and not lcl.is_upval and not cu_special then
+    local au_special = lcl.au_type and lcl.au_type ~= "value"
+    if as_upval and not lcl.is_upval and not au_special then
       local id = #self.upvals
 
       -- Because the first "upvalue" is the parents upvalue object
@@ -137,7 +125,7 @@ function Function:get_local (name, as_upval)
       lcl.upval_id = id
 
       local reg_t = any_t
-      if lcl.cu_type == "value" then
+      if lcl.au_type == "value" then
         reg_t = types[reg.type_id]
       end
 
@@ -250,14 +238,14 @@ function Function:compile_call (node, accept_cu)
   if req then return req end
 
   local base = self:compileExpr(node.base, true)
-  if base.cu_type then 
-    local result = self:compile_cu_call(node, base)
-    if not result.cu_type then
+  if base.au_type then 
+    local result = self:compile_au_call(node, base)
+    if not result.au_type then
       local stack = self:call(stack_f)
       self:inst{push_f, stack, result}
       return stack
     elseif accept_cu then return result
-    else err("cannot use a cobre expression as value", node) end
+    else err("cannot use a auro expression as value", node) end
   end
 
   local f_reg = base
@@ -290,12 +278,12 @@ end
 
 function Function:compile_bool (node)
   local value = self:compileExpr(node, true)
-  if not value.cu_type then
-    local bool_value = self:inst{bool_f, value, cu_type="value", type_id=bool_t.id}
+  if not value.au_type then
+    local bool_value = self:inst{bool_f, value, au_type="value", type_id=bool_t.id}
     return bool_value
-  elseif value.cu_type == "value" and value.type_id == bool_t.id then
+  elseif value.au_type == "value" and value.type_id == bool_t.id then
     return value
-  else err("cannot use a cobre expression as value", node) end
+  else err("cannot use a auro expression as value", node) end
 end
 
 function Function:compileExpr (node, accept_cu)
@@ -318,13 +306,13 @@ function Function:compileExpr (node, accept_cu)
   elseif tp == "var" then
     local lcl = self:get_local(node.name)
     if lcl then
-      if lcl.cu_type then
+      if lcl.au_type then
         if not accept_cu then
-          err("cannot use a cobre expression as value", node)
+          err("cannot use a auro expression as value", node)
         end
-        if lcl.cu_type ~= "value" then return lcl end
+        if lcl.au_type ~= "value" then return lcl end
       end
-      return self:inst{"var", lcl, cu_type=lcl.cu_type, type_id=lcl.type_id}
+      return self:inst{"var", lcl, au_type=lcl.au_type, type_id=lcl.type_id}
     else
       local env = self:get_local("_ENV")
       if not env then err("local \"_ENV\" not in sight", node) end
@@ -399,7 +387,7 @@ function Function:compileExpr (node, accept_cu)
     if result.regs and #result.regs > 0 then
       return result.regs[1]
     end
-    if result.cu_type then return result end
+    if result.au_type then return result end
     return self:inst{first_f, result}
   else err("expression " .. tp .. " not supported", node) end
 end
@@ -421,13 +409,13 @@ function Function:assign (vars, values, line)
 
     if stack then
       if stack.regs then
-        -- This is a result from a cobre function, which can have
+        -- This is a result from a auro function, which can have
         -- multiple results. Go through each of them or use nils
         reg = stack.regs[i + 1 - #values]
         if not reg then
           reg = self:call(nil_f)
         end
-      elseif stack.cu_type then
+      elseif stack.au_type then
         reg, stack = stack, nil
       else 
         reg = self:call(next_f, stack)
@@ -442,7 +430,7 @@ function Function:assign (vars, values, line)
       if var.lcl then accept_cu = true end
       if type(var) == "string" then
         local lcl = self:get_local(var)
-        if lcl and lcl.cu_type then
+        if lcl and lcl.au_type then
           accept_cu = true
         end
       end
@@ -452,12 +440,12 @@ function Function:assign (vars, values, line)
 
     if var then
       if var.lcl then
-        if not reg.cu_type then
+        if not reg.au_type then
           reg = self:inst{"local", reg}
         end
         self.scope.locals[var.lcl] = reg
       elseif var.base then
-        if reg.cu_type then
+        if reg.au_type then
           error("attempt to assign a typed expression to a table field, at line " .. line)
         end
         self:inst{set_f, var.base, var.key, reg}
@@ -465,20 +453,20 @@ function Function:assign (vars, values, line)
         local lcl = self:get_local(var)
         if lcl then
           -- Type checking
-          if lcl.cu_type then
-            if not reg.cu_type then
+          if lcl.au_type then
+            if not reg.au_type then
               error("attempt to assign a lua expression to a typed local, at line " .. line)
             elseif reg.type_id ~= lcl.type_id then
               local src = types[reg.type_id+1].name
               local tgt = types[lcl.type_id+1].name
               error("attempt to assign a " .. src .. " to a " .. tgt .. " local, at line " .. line)
             end
-          elseif reg.cu_type then
+          elseif reg.au_type then
             error("attempt to assign a typed expression to a lua local, at line " .. line)
           end
           self:inst{"set", lcl, reg, line=line}
         else
-          if reg.cu_type then
+          if reg.au_type then
             error("attempt to assign a typed expression to a lua global, at line " .. line)
           end
           local env = self:get_local("_ENV")
@@ -791,7 +779,7 @@ function Function:transform ()
     elseif f == "label" then
       self.labels[inst[2]] = #self.code
     elseif f == "jif" or f == "nif" then
-      if not inst[3].cu_type then
+      if not inst[3].au_type then
         inst[3] = self:inst{bool_f, inst[3]}
         inst[3].reg = reginc()
       end
@@ -850,7 +838,7 @@ return function (ast, filename)
   -- valid. To be used when requiring
   lua_main.scope.locals[".ENV"] = lua_main:inst{"local", {reg=0}}
 
-  lua_main.scope.locals["_CU_IMPORT"] = {cu_type="import"}
+  lua_main.scope.locals["_AU_IMPORT"] = {au_type="import"}
 
   lua_main:compileBlock(ast)
   if #ast == 0 or ast[#ast].type ~= "return" then

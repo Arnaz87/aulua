@@ -34,7 +34,7 @@ return function (_wbyte)
     rstr(str)
   end
 
-  rstr("Cobre 0.6\0")
+  rstr("Auro 0.6\0")
   wint(#modules+1) -- Count the export module, but not the argument module
   wbyte(2, 2) -- Export module is a module definition with 2 items
 

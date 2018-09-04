@@ -1,9 +1,9 @@
 #!/bin/env bash
 mkdir -p dist
 
-MAIN=culua/init.lua
+MAIN=aulua/init.lua
 
-cobre culang lua.cu dist/lua
+auro culang lua.cu dist/lua
 lua $MAIN -o dist/ lua_lib/table.lua
 lua $MAIN -o dist/ lua_lib/string.lua
 lua $MAIN -o dist/ lua_lib/pattern.lua
@@ -13,17 +13,17 @@ lua $MAIN -o dist/ lua_parser/parser.lua
 lua $MAIN -o dist/ lua_parser/lexer.lua
 lua $MAIN -o dist/lua_parser lua_parser/init.lua
 
-lua $MAIN -o dist/ culua/helpers.lua
-lua $MAIN -o dist/ culua/basics.lua
-lua $MAIN -o dist/ culua/codegen.lua
-lua $MAIN -o dist/ culua/cobre_syntax.lua
-lua $MAIN -o dist/ culua/write.lua
-lua $MAIN -o dist/ culua/compile.lua
-lua $MAIN -o dist/culua culua/init.lua
+lua $MAIN -o dist/ aulua/helpers.lua
+lua $MAIN -o dist/ aulua/basics.lua
+lua $MAIN -o dist/ aulua/codegen.lua
+lua $MAIN -o dist/ aulua/auro_syntax.lua
+lua $MAIN -o dist/ aulua/write.lua
+lua $MAIN -o dist/ aulua/compile.lua
+lua $MAIN -o dist/aulua aulua/init.lua
 
 if [ "$1" == "install" ]; then
   cd dist
   for a in $(ls); do
-    cobre --install $a
+    auro --install $a
   done
 fi

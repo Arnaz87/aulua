@@ -1,9 +1,9 @@
 -- This library only works with culua, in no other lua implementation
 
-local float_module = _CU_IMPORT("cobre", "float")
+local float_module = _AU_IMPORT("auro", "float")
 local float = float_module:get_type("float")
 
-local cu_math = _CU_IMPORT("cobre", "math")
+local cu_math = _AU_IMPORT("auro", "math")
 
 function getarg (x, name, i)
   if not i then i = 1 end
@@ -16,7 +16,7 @@ end
 
 local cu_pi = cu_math:get_function("pi", {}, {float})()
 local cu_e = cu_math:get_function("e", {}, {float})()
-local cu_inf = cu_math:get_function("infinity", {}, {float})()
+local cu_inf = float_module:get_function("infinity", {}, {float})()
 
 math.pi = cu_pi:to_lua_value()
 math.huge = cu_inf:to_lua_value()

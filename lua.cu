@@ -1,7 +1,7 @@
 
-// TODO: Use 64 bit floats, when available in cobre
+// TODO: Use 64 bit floats, when available in auro
 
-import cobre.system {
+import auro.system {
   void println (string);
   void error (string);
   void exit (int);
@@ -9,9 +9,9 @@ import cobre.system {
   string argv (int);
 }
 
-import cobre.buffer { type buffer; }
+import auro.buffer { type buffer; }
 
-import cobre.string {
+import auro.string {
   string itos (int);
   
   int length (string) as strlen;
@@ -25,7 +25,7 @@ import cobre.string {
   buffer tobuffer (string);
 }
 
-import cobre.math {
+import auro.math {
   float floor (float);
   float trunc (float);
   float mod (float, float) as fmod;
@@ -51,7 +51,7 @@ bool getBool (any a) { return a as bool; }
 Table getTable (any a) { return a as Table; }
 Function getFn (any a) { return a as Function; }
 
-import cobre.utils.arraylist (any) {
+import auro.utils.arraylist (any) {
   type `` as Array {
     any get (int);
     void push (any);
@@ -61,7 +61,7 @@ import cobre.utils.arraylist (any) {
   Array `new` () as newArray;
 }
 
-import cobre.function (Stack as in0, Stack as out0) {
+import auro.function (Stack as in0, Stack as out0) {
   type `` as Function {
     Stack apply (Stack);
   }
@@ -350,7 +350,7 @@ any idiv (any a, any b) {
   return arith(a, b, "__idiv");
 }
 
-import cobre.int {
+import auro.int {
   int mod (int, int) as imod;
 }
 
@@ -517,7 +517,7 @@ bool checkKey (any a) { return testStr(a) || testInt(a); }
 
 struct Pair { any key; any val; }
 
-import cobre.utils.arraylist (Pair) {
+import auro.utils.arraylist (Pair) {
   type `` as PairArr {
     Pair get (int);
     void set (int, Pair);
@@ -529,7 +529,7 @@ import cobre.utils.arraylist (Pair) {
 
 struct MapPair { string k; any v; }
 
-import cobre.utils.stringmap (any) {
+import auro.utils.stringmap (any) {
   type `` as Map {
     any? get (string);
     void set (string, any);
@@ -564,7 +564,7 @@ struct Table {
   // One iterator is mantained, so that for-in loops can run in hopefully
   // constant time, but performance will degrade if next is used arbitrarily.
 
-  // TODO: When cobre gets hashmaps, use a single hashmap for everything non-int
+  // TODO: When auro gets hashmaps, use a single hashmap for everything non-int
 
   any get (Table this, any key) {
     if (key is int) {
@@ -959,7 +959,7 @@ import lua_lib.table { Stack lua_main (any) as table_main; }
 
 //======= IO and OS =======//
 
-import cobre.io {
+import auro.io {
   type file as File;
   type mode as FileMode;
   FileMode r() as r_mode;
@@ -1243,7 +1243,7 @@ any get_global () {
 
     tbl.set(anyStr("_G"), anyTable(tbl));
     tbl.set(anyStr("_VERSION"), anyStr("Lua 5.3"));
-    tbl.set(anyStr("_CU_VERSION"), anyStr("0.6"));
+    tbl.set(anyStr("_AU_VERSION"), anyStr("0.6"));
     tbl.set(anyStr("assert"), anyFn(__assert()));
     tbl.set(anyStr("error"), anyFn(__error()));
     tbl.set(anyStr("getmetatable"), anyFn(__getmeta()));
