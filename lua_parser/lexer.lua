@@ -20,7 +20,7 @@ end
 
 function check (patt, exact)
   if exact then
-    if source:find(patt, 1, true) == 1
+    if source:sub(1, #patt) == patt
     then return patt end
   else return source:match("^" .. patt) end
 end

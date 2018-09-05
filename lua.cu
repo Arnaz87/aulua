@@ -138,7 +138,7 @@ any parseNum (string s) {
   // Skip whitespace, fail or start hex
   while (i < len) {
     ch, i = charat(s, i);
-    if (codeof(ch) == 48) { // '0'
+    if ((codeof(ch) == 48) && (i < len)) { // '0'
       ch, i = charat(s, i);
       if ((codeof(ch) == 88) || (codeof(ch) == 120)) // Xx
         goto hexadecimal;
@@ -764,14 +764,16 @@ void set (any t, any k, any v) {
 
 any length (any a) {
   if (testStr(a)) return anyInt(strlen(getStr(a)));
-  if (testTable(a)) {
-    Table t = getTable(a);
 
-    if (!t.meta.isnull()) {
-      any len_fn = (t.meta.get() as Table).get(anyStr("__len"));
-      if (!testNil(len_fn))
-        return call(len_fn, stackof(a)).first();
-    }
+  Table? mt = get_metatable(a);
+  if (!mt.isnull()) {
+    any len_fn = mt.get().get(anyStr("__len"));
+    if (!testNil(len_fn))
+      return call(len_fn, stackof(a)).first();
+  }
+
+  if (a is Table) {
+    Table t = a as Table;
 
     // Tentative limit (remember the array is 0-index while lua is 1-index)
     int i = t.arr.len() - 1;
@@ -784,6 +786,7 @@ any length (any a) {
         if (testNil(t.arr[i])) i = i-1;
         else return (i+1) as any;
       }
+      return 0 as any;
     } else if (t.get((i+2) as any) is nil_t) {
       return (i+1) as any;
     } else {

@@ -418,6 +418,7 @@ function Parser.ifstat ()
 end
 
 function Parser.statement ()
+  --print("statement:", token.type, token.value)
   local pos = get_pos()
   if try(";") then return nil
 
