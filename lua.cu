@@ -1088,7 +1088,7 @@ int valid_end_index (int i, int len) {
   return i;
 }
 
-Stack _strsub (Stack args) {
+Stack _strsubstr (Stack args) {
   string s = simple_string(args.next(), "1", "string.sub");
   int len = strlen(s);
 
@@ -1101,7 +1101,7 @@ Stack _strsub (Stack args) {
 
   return stackof(anyStr(s2));
 }
-import module newfn (_strsub) { Function `` () as __strsub; }
+import module newfn (_strsubstr) { Function `` () as __strsubstr; }
 
 Stack _strbyte (Stack args) {
   string s = simple_string(args.next(), "1", "string.byte");
@@ -1273,7 +1273,7 @@ any get_global () {
     // idiv mod pow unm (unary minus)
 
     tbl.set(anyStr("string"), anyTable(State.string));
-    State.string.set(anyStr("sub"), anyFn(__strsub()));
+    State.string.set(anyStr("sub"), anyFn(__strsubstr()));
     State.string.set(anyStr("byte"), anyFn(__strbyte()));
     State.string.set(anyStr("char"), anyFn(__strchar()));
     // These functions can be done in pure lua
