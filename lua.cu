@@ -279,7 +279,7 @@ float, float, bool getFloats (any a, any b) {
   return fa, fb, true;
 }
 
-private any arith (any a, any b, string key) {
+private any? meta_binop (any a, any b, string key) {
   Table? meta = get_metatable(a);
   if (meta.isnull()) {
     meta = get_metatable(b);
@@ -293,11 +293,18 @@ private any arith (any a, any b, string key) {
     args.push(a);
     args.push(b);
     Stack result = f.apply(args);
-    return result.first();
+    return result.first() as any?;
   }
 
   err:
-  error("Lua: attempt to perform arithmetic on a " + typestr(a) + " value");
+  return new any?();
+}
+
+private any meta_arith (any a, any b, string key) {
+  any? r = meta_binop(a, b, key);
+  if (r.isnull())
+    error("Lua: attempt to perform arithmetic on a " + typestr(a) + " value");
+  return r.get();
 }
 
 any add (any a, any b) {
@@ -306,7 +313,7 @@ any add (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa + fb) as any;
-  return arith(a, b, "__add");
+  return meta_arith(a, b, "__add");
 }
 
 any sub (any a, any b) {
@@ -315,7 +322,7 @@ any sub (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa - fb) as any;
-  return arith(a, b, "__sub");
+  return meta_arith(a, b, "__sub");
 }
 
 any mul (any a, any b) {
@@ -324,14 +331,14 @@ any mul (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa * fb) as any;
-  return arith(a, b, "__mul");
+  return meta_arith(a, b, "__mul");
 }
 
 any div (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return (fa / fb) as any;
-  return arith(a, b, "__div");
+  return meta_arith(a, b, "__div");
 }
 
 any idiv (any a, any b) {
@@ -347,7 +354,7 @@ any idiv (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return floor(fa / fb) as any;
-  return arith(a, b, "__idiv");
+  return meta_arith(a, b, "__idiv");
 }
 
 import auro.int {
@@ -363,7 +370,7 @@ any mod (any a, any b) {
   }
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
-  if (!t) return arith(a, b, "__mod");
+  if (!t) return meta_arith(a, b, "__mod");
   float r = fmod(fa, fb);
   if ((r * fb) >= itof(0)) return r as any;
   return (r + fb) as any;
@@ -373,7 +380,7 @@ any pow (any a, any b) {
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return fpow(fa, fb) as any;
-  return arith(a, b, "__pow");
+  return meta_arith(a, b, "__pow");
 }
 
 any concat (any a, any b) {
@@ -408,7 +415,25 @@ string tostr (any a) {
       return "true";
     else
       return "false";
-  } else return typestr(a);
+  }
+
+  Table? meta = get_metatable(a);
+  if (!meta.isnull()) {
+    any index = meta.get().get("__tostring" as any);
+    if (testFn(index)) {
+      Function f = getFn(index);
+      Stack args = newStack();
+      args.push(a);
+      Stack result = f.apply(args);
+      any r = result.first();
+      if (r is string) return r as string;
+      error("'__tostring' must return a string");
+    }
+  }
+
+  if (a is Table) return "table:" + itos((a as Table).id);
+  if (a is UserData) return "userdata:" + itos(((a as UserData) as UserDataInner).id);
+  return typestr(a);
 }
 
 bool tobool (any a) {
@@ -418,57 +443,99 @@ bool tobool (any a) {
 }
 
 bool equals (any a, any b) {
+  if (testNil(a) && testNil(b)) return true;
   if (testInt(a) && testInt(b)) return getInt(a) == getInt(b);
   if (testStr(a) && testStr(b)) return getStr(a) == getStr(b);
+
   float fa, fb; bool t;
   fa, fb, t = getFloats(a, b);
   if (t) return fa == fb;
+
   if (testBool(a) && testBool(b)) {
     bool _a = getBool(a), _b = getBool(b);
     return (_a && _b) || (!_a && !_b);
   }
-  if (testNil(a) && testNil(b)) return true;
-  /*if (testTable(a) && testTable(b)) {
+
+  if (testTable(a) && testTable(b)) {
     Table ta = getTable(a);
     Table tb = getTable(b);
-  }*/
+    if (ta.id == tb.id) return true;
 
-  // TODO: iplmement equality for tables and userdata (using explicit ids)
+    any? r = meta_binop(a, b, "__eq");
+    if (r.isnull()) return false;
+    return tobool(r.get());
+  }
+
+  if ((a is UserData) && (b is UserData)) {
+    UserDataInner ta = (a as UserData) as UserDataInner;
+    UserDataInner tb = (b as UserData) as UserDataInner;
+    if (ta.id == tb.id) return true;
+
+    any? r = meta_binop(a, b, "__eq");
+    if (r.isnull()) return false;
+    return tobool(r.get());
+  }
+
   return false;
 }
 
-int cmp (any _a, any _b) {
-  if (testInt(_a) && testInt(_b)) {
-    int a = getInt(_a), b = getInt(_b);
-    if (a < b) return 0-1;
-    if (a == b) return 0;
-    return 1;
+private any meta_cmp (any a, any b, string key) {
+  any? r = meta_binop(a, b, key);
+  if (r.isnull())
+    error("Lua: attempt to compare " + typestr(a) + " with a " + typestr(b));
+  return r.get();
+}
+
+private int str_cmp (string a, string b) {
+  int al = strlen(a), bl = strlen(b);
+  int len = al; if (bl < al) len = bl;
+  int i = 0;
+  while (i < len) {
+    int ca = codeof(charat(a, i));
+    int cb = codeof(charat(b, i));
+    if (ca < cb) return 0-1;
+    if (ca > cb) return 1;
+    i = i+1;
   }
-  if (testStr(_a) && testStr(_b)) {
-    string a = getStr(_a), b = getStr(_b);
-    int al = strlen(a), bl = strlen(b);
-    int len = al; if (bl < al) len = bl;
-    int i = 0;
-    while (i < len) {
-      int ca = codeof(charat(a, i));
-      int cb = codeof(charat(b, i));
-      if (ca < cb) return 0-1;
-      if (ca > cb) return 1;
-      i = i+1;
-    }
-    if (al < bl) return 0-1;
-    if (al > bl) return 1;
-    return 0;
-  }
-  error("Lua: attempt to compare " + typestr(_a) + " with " + typestr(_b));
+  if (al < bl) return 0-1;
+  if (al > bl) return 1;
+  return 0;
+}
+
+private bool _lt (any a, any b) {
+  if ((a is int) && (b is int))
+    return (a as int) < (b as int);
+
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return fa < fb;
+
+  if ((a is string) && (b is string))
+    return str_cmp(a as string, b as string) < 0;
+
+  return tobool(meta_cmp(a, b, "__lt"));
+}
+
+private bool _le (any a, any b) {
+  if ((a is int) && (b is int))
+    return (a as int) <= (b as int);
+
+  float fa, fb; bool t;
+  fa, fb, t = getFloats(a, b);
+  if (t) return fa <= fb;
+
+  if ((a is string) && (b is string))
+    return str_cmp(a as string, b as string) <= 0;
+
+  return tobool(meta_cmp(a, b, "__le"));
 }
 
 any eq (any a, any b) { return equals(a, b) as any; }
 any ne (any a, any b) { return anyBool(!equals(a, b)); }
-any lt (any a, any b) { return anyBool(cmp(a, b) < 0); }
-any le (any a, any b) { return anyBool(cmp(a, b) <= 0); }
-any gt (any a, any b) { return anyBool(cmp(a, b) > 0); }
-any ge (any a, any b) { return anyBool(cmp(a, b) >= 0); }
+any lt (any a, any b) { return _lt(a, b) as any; }
+any le (any a, any b) { return _le(a, b) as any; }
+any gt (any a, any b) { return (!_le(a, b)) as any; }
+any ge (any a, any b) { return (!_lt(a, b)) as any; }
 
 any not (any a) { return anyBool(!tobool(a)); }
 any unm (any a) {
@@ -504,11 +571,18 @@ Stack call (any _f, Stack args) {
 //======= Objects =======//
 
 struct UserDataInner {
+  int id;
   any data;
   Table? meta;
 }
 
 type UserData (UserDataInner);
+
+UserData newUserData (any data, Table? meta) {
+  int id = IdState.id;
+  IdState.id = id + 1;
+  return (new UserDataInner(id, data, meta)) as UserData;
+}
 
 
 //======= Objects =======//
@@ -544,6 +618,8 @@ import auro.utils.stringmap (any) {
 }
 
 struct Table {
+  int id;
+
   Map map;
   Array arr;
   PairArr pairs;
@@ -719,9 +795,14 @@ void table_append (any _t, any _n, Stack stack) {
 
 type MetaTable (Table);
 
-private Table emptyTable () { return new Table(
-  newMap(), newArray(), emptyPairArr(), new MetaTable?(), new iterator?(), new string?()
-); }
+private Table emptyTable () {
+  int id = IdState.id;
+  IdState.id = id + 1;
+  return new Table(
+    id, newMap(), newArray(), emptyPairArr(),
+    new MetaTable?(), new iterator?(), new string?()
+  );
+}
 any newTable () { return emptyTable() as any; }
 
 Table? get_metatable (any a) {
@@ -804,6 +885,7 @@ any length (any a) {
 
 //======= State =======//
 
+struct IdStateT { int id; }
 struct StateT {
   bool ready;
   Table _G;
@@ -814,6 +896,7 @@ struct StateT {
 }
 
 StateT State = new StateT(false, emptyTable(), emptyTable(), emptyTable(), emptyTable(), emptyTable());
+IdStateT IdState = new IdStateT(0);
 
 
 //======= Core Library =======//
@@ -999,8 +1082,8 @@ Stack _open (Stack args) {
   else error("bad argument #2 to 'io.open' (invalid mode)");
 
   File file = open(filename, m);
-  UserDataInner ud = new UserDataInner(file as any, State.file_meta as Table?);
-  return stackof((ud as UserData) as any);
+  UserData ud = newUserData(file as any, State.file_meta as Table?);
+  return stackof(ud as any);
 }
 import module newfn (_open) { Function `` () as __open; }
 
@@ -1058,6 +1141,15 @@ Stack _close (Stack args) {
   return newStack();
 }
 import module newfn (_close) { Function `` () as __close; }
+
+Stack _filestr (Stack args) {
+  any a = args.next();
+  File file = get_file(a); // trigger error
+  int id = ((a as UserData) as UserDataInner).id;
+  string s = "file (" + itos(id) + ")";
+  return stackof(s as any);
+}
+import module newfn (_filestr) { Function `` () as __filestr; }
 
 Stack _exit (Stack args) {
   any a = args.next();
@@ -1294,6 +1386,7 @@ any get_global () {
     State.file_meta.set("read" as any, __read() as any);
     State.file_meta.set("write" as any, __write() as any);
     State.file_meta.set("close" as any, __close() as any);
+    State.file_meta.set("__tostring" as any, __filestr() as any);
 
     Table os_tbl = emptyTable();
     tbl.set("os" as any, os_tbl as any);
@@ -1303,6 +1396,7 @@ any get_global () {
     tbl.set("math" as any, math_tbl as any);
     math_tbl.set("tointeger" as any, __tointeger() as any);
     math_tbl.set("tofloat" as any, __tofloat() as any);
+    math_tbl.set("type" as any, __mathtype() as any);
     math_main(State._G as any);
 
 

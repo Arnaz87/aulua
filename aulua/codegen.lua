@@ -296,7 +296,7 @@ function Function:compileExpr (node, accept_cu)
     end
     return self:inst{f}
   elseif tp == "num" then
-    local cns = constant(tonumber(node.value))
+    local cns = constant(node.value, "number")
     return self:inst{cns}
   elseif tp == "str" then
     local cns = constant(node.value)

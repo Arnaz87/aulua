@@ -124,20 +124,20 @@ function const_call (f, ...)
   return data
 end
 
-function constant (value)
-  local cns = constant_cache[value]
-  if cns then return cns end
-  if type(value) == "string" then
-    local raw = raw_const("bin", value)
-    local str = const_call(rawstr_f, raw)
-    cns = const_call(anystr_f, str)
-  elseif type(value) == "number" then
-    local raw = raw_const("bin", tostring(value))
-    local str = const_call(rawstr_f, raw)
-    cns = const_call(parsenum_f, str)
+function constant (value, tp)
+  local cache = str_cache
+  local fn = anystr_f
+  if tp == "number" then
+    cache = num_cache
+    fn = parsenum_f
   end
-  constant_cache[value] = cns
-  return cns
+
+  local cns = cache[value]
+  if cns then return cns end
+
+  local raw = raw_const("bin", tostring(value))
+  local str = const_call(rawstr_f, raw)
+  return const_call(fn, str)
 end
 
 local function create_basic_items ()
@@ -219,7 +219,8 @@ function create_compiler_state ()
   sourcemap = {"source map"}
 
   constants = {}
-  constant_cache = {}
+  num_cache = {}
+  str_cache = {}
 
   create_basic_items()
 end
