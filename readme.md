@@ -1,17 +1,17 @@
-# Lua cobre compiler
+# Lua auro compiler
 
-Compiles **Lua 5.4** code to the [Cobre VM](https://github.com/Arnaz87/cobrevm). Written in itself in 6K lines of code.
+Compiles **Lua 5.4** code to the [Cobre VM](https://github.com/Arnaz87/aurovm). Written in itself in 6K lines of code.
 
-You can play with it [here](http://arnaud.com.ve/cobre/), working with the Javascript [implementation](https://github.com/Arnaz87/cobreweb) of Cobre.
+You can play with it [here](http://arnaud.com.ve/auro/), working with the Javascript [implementation](https://github.com/Arnaz87/auroweb) of Cobre.
 
 **Lisence**: This project is free software, published under the
   [MIT License](https://opensource.org/licenses/MIT)
 
 # Usage
 
-First you need [Culang](https://github.com/Arnaz87/culang) installed to compile the core library, then run `bash build.sh install`, this will compile all source files into cobre modules, both lua and culang code, and install them in the system.
+First you need [Culang](https://github.com/Arnaz87/culang) installed to compile the core library, then run `bash build.sh install`, this will compile all source files into auro modules, both lua and culang code, and install them in the system.
 
-Once installed, the command `cobre culua test.lua` will compile test.lua into a cobre module `test`, then you can run `cobre test` to execute it. `lua culua/init.lua test.lua` can be used instead, before installing the cobre modules.
+Once installed, the command `auro aulua test.lua` will compile test.lua into a auro module `test`, then you can run `auro test` to execute it. `lua aulua/init.lua test.lua` can be used instead, before installing the auro modules.
 
 # Missing features
 
@@ -51,34 +51,38 @@ The project is not finished yet, but these are the main incompatibilities I know
 
 # Cobre interoperability
 
-This implementation has special semantics for cobre interop. Special cobre values cannot be used at runtime and the compiler prevents any such usage.
+This implementation has special semantics for auro interop. Special auro values cannot be used at runtime and the compiler prevents any such usage.
 
-The function _\_CU\_IMPORT_ is a local of the module scope, it receives a list of string literals and joins them with the unit separator character, and then imports the global module with that name and returns it.
+The function _\_AU\_IMPORT_ is a local of the module scope, it receives a list of string literals and joins them with the unit separator character, and then imports the global module with that name and returns it.
 
-The method _get\_type_ of cobre modules receives a string literal and imports that type from the module.
+The method _get\_type_ of auro modules receives a string literal and imports that type from the module.
 
-The method _get\_function_ of cobre modules receives the function name as a string literal, and two table literals with only implicit indices and cobre types as values, being the input and output types of the function respectively.
+The method _get\_function_ of auro modules receives the function name as a string literal, and two table literals with only implicit indices and auro types as values, being the input and output types of the function respectively.
 
-Cobre types can be called with regular lua expressions to convert them to typed cobre values, although it can error.
+Cobre types can be called with regular lua expressions to convert them to typed auro values, although it can error.
 
-The _test_ method of cobre types can be used to ensure an expression is indeed of that type before converting it to avoid errors, it returns a _bool_ typed value.
+The _test_ method of auro types can be used to ensure an expression is indeed of that type before converting it to avoid errors, it returns a _bool_ typed value.
 
 Cobre values of type _bool_ can be used as conditions in _if_, _while_ and _repeat_ statements, but not in logical expressions.
 
-Cobre functions can only be called with typed cobre values and return typed values as well.
+Cobre functions can only be called with typed auro values and return typed values as well.
 
 Typed values can neither be used in regular lua expressions, but unlike other special values, they are concrete runtime values and can be saved in locals and even upvalues.
 
 Regular locals can only hold lua values, but locals which are assigned a typed value on declaration become typed locals, and only values of the type of the first value can be assigned to it subsequently.
 
-The method _to\_lua\_value_ of typed values convert them to regular lua values, which are cobre values of type _any_.
+The method _to\_lua\_value_ of typed values convert them to regular lua values, which are auro values of type _any_.
 
 The following are not yet implemented
 
-The function _\_CU\_MODULE_ accepts as argument a table literal, in which all indices are string literals and all values are either cobre modules, cobre types or cobre functions, and returns a cobre module.
+The function _\_AU\_MODULE_ accepts as argument a table literal, in which all indices are string literals and all values are either auro modules, auro types or auro functions, and returns a auro module.
 
-The method _build_ of cobre modules accepts a cobre module and returns another cobre module.
+The method _build_ of auro modules accepts an argument auro module and returns another auro module.
 
-The _get\_module_ method of cobre modules accepts a string literal and imports the module with that name in the target module.
+The _get\_module_ method of auro modules accepts a string literal and imports the module with that name in the target module.
 
-The function _\_CU\_VALUE_ converts a lua value to a cobre value with type _any_. It does not actually do any conversion because lua values are of type any, but this way lua values themselves can be passed to cobre functions.
+The function _\_AU\_VALUE_ converts a lua value to a auro value with type _any_. It does not actually do any conversion because lua values are of type any, but this way lua values themselves can be passed to auro functions.
+
+The function _\_AU\_EXPORT_ accepts a string and and an auro module, function or type, and exports it with the given name. The export is in the 
+
+The function _\_AU\_FUNCTION_ accepts two table sequence literals containint auro types, inputs and outputs respectively, and a lua function expression, and returns an auro function. The function expression, when compiled, it's arguments are not lua values but auro values, and must return auro values as well.
