@@ -11,7 +11,7 @@ You can play with it [here](http://arnaud.com.ve/auro/), working with the Javasc
 
 First you need [Culang](https://github.com/Arnaz87/culang) installed to compile the core library, then run `bash build.sh install`, this will compile all source files into auro modules, both lua and culang code, and install them in the system.
 
-Once installed, the command `auro aulua test.lua` will compile test.lua into a auro module `test`, then you can run `auro test` to execute it. `lua aulua/init.lua test.lua` can be used instead, before installing the auro modules.
+Once installed, the command `auro aulua test.lua` will compile test.lua into an auro module `test`, then you can run `auro test` to execute it. `lua aulua/init.lua test.lua` can be used instead, before installing the auro modules.
 
 # Missing features
 
@@ -85,4 +85,4 @@ The function _\_AU\_VALUE_ converts a lua value to a auro value with type _any_.
 
 The function _\_AU\_EXPORT_ accepts a string and and an auro module, function or type, and exports it with the given name. The export is in the 
 
-The function _\_AU\_FUNCTION_ accepts two table sequence literals containint auro types, inputs and outputs respectively, and a lua function expression, and returns an auro function. The function expression, when compiled, it's arguments are not lua values but auro values, and must return auro values as well.
+The function _\_AU\_FUNCTION_ accepts two table sequence literals containint auro types, inputs and outputs respectively, and a lua function expression, and returns an auro function. The function expression, when compiled, does not have access to upvalues, it's arguments are auro values and must return auro values as well. The resulting auro function accepts an additional argument of type any which is the lua environment.

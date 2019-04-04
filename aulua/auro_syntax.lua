@@ -14,18 +14,22 @@ function Function:compile_au_call (node, base)
     return tp.any_module
   end
 
-  if tp == "import" then
-    if base.key then err("attempt to index '" .. node.key .. "' on _AU_IMPORT", node) end
-    local names = {}
-    if #node.values < 1 then err("bad argument #1 for _AU_IMPORT (string literal expected)", node) end
-    for i, v in ipairs(node.values) do
-      if v.type ~= "str" then
-        err("bad argument #" .. i .. " for _AU_IMPORT (string literal expected)", node)
+  if tp == "macro" then
+    if base.key then err("attempt to index '" .. node.key .. "' on an auro macro", node) end
+    if base.macro == "import" then
+      local names = {}
+      if #node.values < 1 then err("bad argument #1 for _AU_IMPORT (string literal expected)", node) end
+      for i, v in ipairs(node.values) do
+        if v.type ~= "str" then
+          err("bad argument #" .. i .. " for _AU_IMPORT (string literal expected)", node)
+        end
+        table.insert(names, v.value)
       end
-      table.insert(names, v.value)
+      local mod = module(table.concat(names, "\x1f"))
+      return {au_type="module", module_id=mod.id}
+    elseif base.macro == "function" then
+      err("auro function definitions not yet supported")
     end
-    local mod = module(table.concat(names, "\x1f"))
-    return {au_type="module", module_id=mod.id}
   elseif tp == "module" then
 
     -- lua tables are 1-indexed, but auro module ids start at 2 because 0

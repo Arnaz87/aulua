@@ -233,7 +233,7 @@ function Function:compile_require (node)
   return self:inst{fn, env}
 end
 
-function Function:compile_call (node, accept_cu)
+function Function:compile_call (node, accept_au)
   local req = self:compile_require(node)
   if req then return req end
 
@@ -244,7 +244,7 @@ function Function:compile_call (node, accept_cu)
       local stack = self:call(stack_f)
       self:inst{push_f, stack, result}
       return stack
-    elseif accept_cu then return result
+    elseif accept_au then return result
     else err("cannot use a auro expression as value", node) end
   end
 
@@ -286,7 +286,7 @@ function Function:compile_bool (node)
   else err("cannot use a auro expression as value", node) end
 end
 
-function Function:compileExpr (node, accept_cu)
+function Function:compileExpr (node, accept_au)
   local tp = node.type
   if tp == "const" then
     local f
@@ -307,7 +307,7 @@ function Function:compileExpr (node, accept_cu)
     local lcl = self:get_local(node.name)
     if lcl then
       if lcl.au_type then
-        if not accept_cu then
+        if not accept_au then
           err("cannot use a auro expression as value", node)
         end
         if lcl.au_type ~= "value" then return lcl end
@@ -383,7 +383,7 @@ function Function:compileExpr (node, accept_cu)
     end
     return table
   elseif tp == "call" then
-    local result = self:compile_call(node, accept_cu)
+    local result = self:compile_call(node, accept_au)
     if result.regs and #result.regs > 0 then
       return result.regs[1]
     end
@@ -425,17 +425,17 @@ function Function:assign (vars, values, line)
       if var.repr then value.repr = var.repr
       elseif var.lcl then value.repr = var.lcl end
 
-      local accept_cu = false
+      local accept_au = false
 
-      if var.lcl then accept_cu = true end
+      if var.lcl then accept_au = true end
       if type(var) == "string" then
         local lcl = self:get_local(var)
         if lcl and lcl.au_type then
-          accept_cu = true
+          accept_au = true
         end
       end
 
-      reg = self:compileExpr(value, accept_cu)
+      reg = self:compileExpr(value, accept_au)
     else reg = self:call(nil_f) end
 
     if var then
@@ -838,7 +838,8 @@ return function (ast, filename)
   -- valid. To be used when requiring
   lua_main.scope.locals[".ENV"] = lua_main:inst{"local", {reg=0}}
 
-  lua_main.scope.locals["_AU_IMPORT"] = {au_type="import"}
+  lua_main.scope.locals["_AU_IMPORT"] = {au_type="macro", macro="import"}
+  lua_main.scope.locals["_AU_FUNCTION"] = {au_type="macro", macro="function"}
 
   lua_main:compileBlock(ast)
   if #ast == 0 or ast[#ast].type ~= "return" then
