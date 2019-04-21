@@ -9,7 +9,11 @@ import auro.system {
   string argv (int);
 }
 
-import auro.buffer { type buffer; }
+import auro.buffer {
+  type buffer;
+  buffer `new` (int size) as newbuf;
+  void set (buffer, int index, int value) as bufset;
+}
 
 import auro.string {
   string itos (int);
@@ -1135,6 +1139,27 @@ Stack _write (Stack args) {
 }
 import module newfn (_write) { Function `` () as __write; }
 
+Stack _writebytes (Stack args) {
+  File file = get_file(args.next());
+
+
+  var buf = newbuf(args.length());
+
+  int i = 0;
+  while (args.more()) {
+    int byte = simple_number(args.next(), itos(i+1), "writebytes");
+
+    // TODO: Does this error if not in [0, 255]?
+    bufset(buf, i, byte);
+    i = i+1;
+  }
+
+  write(file, buf);
+
+  return newStack();
+}
+import module newfn (_writebytes) { Function `` () as __writebytes; }
+
 Stack _close (Stack args) {
   File file = get_file(args.next());
   close(file);
@@ -1385,6 +1410,7 @@ any get_global () {
     State.file_meta.set("__index" as any, State.file_meta as any);
     State.file_meta.set("read" as any, __read() as any);
     State.file_meta.set("write" as any, __write() as any);
+    State.file_meta.set("writebytes" as any, __writebytes() as any);
     State.file_meta.set("close" as any, __close() as any);
     State.file_meta.set("__tostring" as any, __filestr() as any);
 

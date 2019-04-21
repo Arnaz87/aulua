@@ -56,8 +56,17 @@ input_file:close()
 
 output_file, io_err = io.open(out_filename, "wb")
 if not output_file then error(io_err) end
-function callback (byte)
-  output_file:write(string.char(byte))
+
+local callback
+
+if output_file.writebytes then
+  function callback (byte)
+    output_file:writebytes(byte)
+  end
+else
+  function callback (byte)
+    output_file:write(string.char(byte))
+  end
 end
 
 local err = compile(contents, callback, filename)

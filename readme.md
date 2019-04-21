@@ -48,6 +48,7 @@ The project is not finished yet, but these are the main incompatibilities I know
 - Each table mantains the state of one iterator, so that a generic for loop is as performant as possible, but performance will degrade significantly if the *next* function is used arbitrarily or if many loops run over the same object simultaneously.
 - Assigning a value on a table while it's being iterated, even if it's an already existing key, is an error.
 - Table length is average case constant but worst case linear (instead of logarithmic)
+- There's `file:writebytes`, because the standard lua way to write binary files is making strings out of the bytes, but auro has no guarantees on string encoding (neither does standard lua, but in practice it's well known what it does).
 
 # Cobre interoperability
 
