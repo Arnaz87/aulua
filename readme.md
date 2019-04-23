@@ -1,15 +1,15 @@
 # Lua auro compiler
 
-Compiles **Lua 5.4** code to the [Auro VM](https://gitlab.com/aurovm/aurovm). Written in itself in 5K lines of code.
+Compiles **Lua 5.4** code to [Auro](https://gitlab.com/aurovm/spec#auro) modules. Written in itself in 5K lines of code.
 
-You can play with it [here](http://arnaud.com.ve/auro/), working with the Javascript [implementation](https://gitlab.com/aurovm/auroweb) of Auro.
+You can play with it [here](http://arnaud.com.ve/auro/?lang=lua).
 
 **Lisence**: This project is free software, published under the
   [MIT License](https://opensource.org/licenses/MIT)
 
 # Usage
 
-First you need [Culang](https://gitlab.com/aurovm/aulang#culanf) installed to compile the core library, then run `bash build.sh install`, this will compile all source files into auro modules, both lua and culang code, and install them in the system.
+First you need [Culang](https://gitlab.com/aurovm/aulang#culang) installed to compile the core library, then run `bash build.sh install`, this will compile all source files into auro modules, both lua and culang code, and install them in the system.
 
 Once installed, the command `auro aulua test.lua` will compile test.lua into an auro module `test`, then you can run `auro test` to execute it. `lua aulua/init.lua test.lua` can be used instead, before installing the auro modules.
 
